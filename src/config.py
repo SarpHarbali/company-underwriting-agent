@@ -15,7 +15,9 @@ class Settings:
     companies_house_api_key: str
     database_url: str
     openai_api_key: str
-    openai_model: str
+    openai_research_model: str
+    openai_query_model: str
+    openai_auditor_model: str
     max_research_turns: int
     max_auditor_turns: int
     web_search_context_size: str
@@ -74,7 +76,13 @@ def load_settings() -> Settings:
         companies_house_api_key=_require("COMPANIES_HOUSE_API_KEY"),
         database_url=_require("DATABASE_URL"),
         openai_api_key=_require("OPENAI_API_KEY"),
-        openai_model=os.environ.get("OPENAI_MODEL", "gpt-4.1"),
+        openai_research_model=os.environ.get(
+            "OPENAI_RESEARCH_MODEL", "gpt-5.6-luna"
+        ),
+        openai_query_model=os.environ.get("OPENAI_QUERY_MODEL", "gpt-5.6-luna"),
+        openai_auditor_model=os.environ.get(
+            "OPENAI_AUDITOR_MODEL", "gpt-5.6-terra"
+        ),
         max_research_turns=_positive_int("MAX_RESEARCH_TURNS", "8"),
         max_auditor_turns=_positive_int("MAX_AUDITOR_TURNS", "2"),
         web_search_context_size=_choice(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from openai import OpenAI
+from openai.types.shared import Reasoning
 from pydantic import BaseModel, ConfigDict
 
 from src.companies_house.resolver import QuerySuggester
@@ -42,6 +43,7 @@ def build_query_suggester(client: OpenAI, model: str) -> QuerySuggester:
     def suggest(text: str) -> str | None:
         response = client.responses.parse(
             model=model,
+            reasoning=Reasoning(effort="none"),
             input=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": text},

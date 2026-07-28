@@ -49,6 +49,8 @@ def test_specialists_run_in_parallel_before_auditor(monkeypatch):
         nonlocal started, structured, auditor_started_after_specialists
         assert kwargs["run_config"].tracing_disabled is True
         if starting_agent.name == "Underwriting evidence auditor":
+            assert starting_agent.model == "gpt-5.6-terra"
+            assert starting_agent.model_settings.reasoning.effort == "none"
             auditor_started_after_specialists = started == 3 and structured == 3
             return SimpleNamespace(
                 final_output=EvidenceAudit(
@@ -63,6 +65,8 @@ def test_specialists_run_in_parallel_before_auditor(monkeypatch):
             )
 
         track_slug = starting_agent.name.split()[0].lower()
+        assert starting_agent.model == "gpt-5.6-luna"
+        assert starting_agent.model_settings.reasoning.effort == "none"
         url = f"https://evidence.example/{track_slug}"
         if "structured findings" not in starting_agent.name:
             assert "Jane Doe" in input
@@ -105,7 +109,9 @@ def test_specialists_run_in_parallel_before_auditor(monkeypatch):
         companies_house_api_key="ch-test",
         database_url="postgresql://unused",
         openai_api_key="openai-test",
-        openai_model="gpt-4.1",
+        openai_research_model="gpt-5.6-luna",
+        openai_query_model="gpt-5.6-luna",
+        openai_auditor_model="gpt-5.6-terra",
         max_research_turns=4,
         max_auditor_turns=2,
         web_search_context_size="medium",

@@ -40,7 +40,7 @@ class Orchestrator:
         self.name_repository = PostgresNameRepository(self.db_pool)
         self.openai_client = OpenAI(api_key=self.settings.openai_api_key)
         self._suggest_query = build_query_suggester(
-            self.openai_client, self.settings.openai_model
+            self.openai_client, self.settings.openai_query_model
         )
 
     def resolve(self, user_input: str) -> ResolutionResult:

@@ -110,6 +110,10 @@ outside the allowed set before the report is rendered.
 Agent tracing is disabled by default for Zero Data Retention compatibility.
 Set `OPENAI_AGENTS_TRACING_ENABLED=true` where tracing is permitted.
 
+Research specialists and company-name correction use `gpt-5.6-luna`; the
+final evidence auditor uses `gpt-5.6-terra`. Override these roles with
+`OPENAI_RESEARCH_MODEL`, `OPENAI_QUERY_MODEL`, and `OPENAI_AUDITOR_MODEL`.
+
 ## Scope and limitations
 
 - The local name index is refreshed only when the loader is rerun. Live company

@@ -8,6 +8,7 @@ from typing import Any, Protocol
 
 from agents import Agent, ModelSettings, RunConfig, Runner, WebSearchTool
 from agents.models.openai_provider import OpenAIProvider
+from openai.types.shared import Reasoning
 
 from src.companies_house.client import CompaniesHouseClient
 from src.config import Settings
@@ -71,6 +72,13 @@ class _SpecialistRun:
     agent_run_count: int = 0
 
 
+def _add_company_overview_source(
+    registry: SourceRegistry, company_profile: dict[str, Any], public_url: str
+) -> None:
+    name = company_profile.get("company_name", company_profile["company_number"])
+    registry.add("companies_house", f"{name} - Company overview", public_url)
+
+
 def _empty_findings(track: ResearchTrack, reason: str) -> SpecialistFindings:
     return SpecialistFindings(
         summary=f"{track.label} research was incomplete.",
@@ -92,11 +100,12 @@ async def _run_specialist(
     agent = Agent(
         name=f"{track.label} research specialist",
         instructions=specialist_instructions(track),
-        model=settings.openai_model,
+        model=settings.openai_research_model,
         tools=[WebSearchTool(search_context_size=settings.web_search_context_size)],
         model_settings=ModelSettings(
             tool_choice="required",
             truncation="auto",
+            reasoning=Reasoning(effort="none"),
         ),
     )
     research_result: Any | None = None
@@ -108,12 +117,7 @@ async def _run_specialist(
             run_config=run_config,
         )
         local_registry = SourceRegistry()
-        local_registry.add(
-            "companies_house",
-            f"{company_profile.get('company_name', company_profile['company_number'])} "
-            "- Company overview",
-            public_url,
-        )
+        _add_company_overview_source(local_registry, company_profile, public_url)
         register_run_sources(research_result, local_registry)
         captured_sources = [
             {"title": source.title, "url": source.url}
@@ -123,7 +127,10 @@ async def _run_specialist(
             name=f"{track.label} specialist - structured findings",
             instructions=specialist_structuring_instructions(track),
             tools=[],
-            model_settings=ModelSettings(truncation="auto"),
+            model_settings=ModelSettings(
+                truncation="auto",
+                reasoning=Reasoning(effort="none"),
+            ),
             output_type=SpecialistFindings,
         )
         structured_result = await Runner.run(
@@ -183,13 +190,8 @@ async def _run_research_async(
     public_url: str,
     progress: ProgressCallback,
 ) -> ResearchResult:
-    company_title = company_profile.get("company_name", company_profile["company_number"])
     registry = SourceRegistry()
-    registry.add(
-        "companies_house",
-        f"{company_title} - Company overview",
-        public_url,
-    )
+    _add_company_overview_source(registry, company_profile, public_url)
 
     provider = OpenAIProvider(api_key=settings.openai_api_key)
     specialist_config = RunConfig(
@@ -273,7 +275,8 @@ async def _run_research_async(
     auditor = Agent(
         name="Underwriting evidence auditor",
         instructions=AUDITOR_INSTRUCTIONS,
-        model=settings.openai_model,
+        model=settings.openai_auditor_model,
+        model_settings=ModelSettings(reasoning=Reasoning(effort="none")),
         output_type=EvidenceAudit,
     )
     progress("Auditing evidence, resolving duplicates and checking contradictions...")
