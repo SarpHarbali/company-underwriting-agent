@@ -45,11 +45,14 @@ def _render_candidates(candidates, key_prefix: str) -> None:
                     st.caption(f"↩︎ matched on former name: *{c.matched_name}*")
 
                 status_dot = "🟢" if c.status == "active" else "⚪"
-                meta = [f"{status_dot} {c.status}", f"No. {c.company_number}"]
+                meta = [
+                    f"{status_dot} Status: {c.status}",
+                    f"Company no.: {c.company_number}",
+                ]
                 if c.incorporation_date:
-                    meta.append(f"inc. {c.incorporation_date.isoformat()}")
+                    meta.append(f"Incorporated: {c.incorporation_date.isoformat()}")
                 if c.postcode:
-                    meta.append(c.postcode)
+                    meta.append(f"Postcode: {c.postcode}")
                 st.caption("  ·  ".join(meta))
             with action_col:
                 if st.button("Select", key=f"{key_prefix}_{c.company_number}"):
