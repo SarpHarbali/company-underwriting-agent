@@ -81,12 +81,12 @@ def test_officers_returns_empty_list_when_not_found():
     assert client.get_officers("12345678") == []
 
 
-def test_search_companies_returns_items():
+def test_filing_history_returns_items():
     def get_fn(url, params=None, timeout=None):
-        assert "/search/companies" in url
-        return FakeResponse(200, {"items": [{"title": "Acme Ltd", "company_number": "12345678"}]})
+        assert url.endswith("/company/12345678/filing-history")
+        assert params == {"items_per_page": 10}
+        return FakeResponse(200, {"items": [{"type": "AA", "date": "2025-01-01"}]})
 
-    client = make_client(get_fn)
-    results = client.search_companies("Acme")
-    assert len(results) == 1
-    assert results[0]["company_number"] == "12345678"
+    filings = make_client(get_fn).get_filing_history("12345678", items_per_page=10)
+
+    assert filings == [{"type": "AA", "date": "2025-01-01"}]

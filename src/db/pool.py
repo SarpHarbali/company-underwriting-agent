@@ -11,13 +11,7 @@ INDEXES_SQL = (Path(__file__).with_name("indexes.sql")).read_text()
 
 
 def create_pool(database_url: str, min_size: int = 1, max_size: int = 4) -> ConnectionPool:
-    """A small pool sized for a single-user Streamlit app.
-
-    Opened lazily (`open=False` then `open()`) with a connect timeout rather
-    than eagerly at import, so a misconfigured or unreachable database surfaces
-    as a clear error at first use instead of a hang on startup. Managed
-    providers idle-close connections, hence the recycle interval.
-    """
+    """Create the connection pool used by the Streamlit app."""
     pool = ConnectionPool(
         conninfo=database_url,
         min_size=min_size,

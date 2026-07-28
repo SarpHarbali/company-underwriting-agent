@@ -4,10 +4,23 @@ from __future__ import annotations
 
 import streamlit as st
 
+from src.companies_house.ranking import Candidate
 from src.orchestrator import Orchestrator
 from src.report.builder import build_official_record_markdown
 
 st.set_page_config(page_title="Underwriting Intelligence Agent", layout="wide")
+
+_SESSION_DEFAULTS = {
+    "resolved_company": None,
+    "candidates": None,
+    "corrected_query": None,
+    "search_text": "",
+    "can_suggest": False,
+    "suggestion": None,
+    "showing_suggestion": False,
+    "no_suggestion_found": False,
+    "report_markdown": None,
+}
 
 
 @st.cache_resource
@@ -16,48 +29,52 @@ def get_orchestrator() -> Orchestrator:
 
 
 def _reset_search_state() -> None:
-    st.session_state.resolved_company = None
-    st.session_state.candidates = None
-    st.session_state.corrected_query = None
-    st.session_state.search_text = ""
-    st.session_state.can_suggest = False
-    st.session_state.suggestion = None
-    st.session_state.showing_suggestion = False
-    st.session_state.no_suggestion_found = False
-    st.session_state.report_markdown = None
+    for key, default in _SESSION_DEFAULTS.items():
+        st.session_state[key] = default
 
 
-def _render_candidates(candidates, key_prefix: str) -> None:
-    """Render a selectable list of candidates, best first."""
-    for i, c in enumerate(candidates):
+def _render_candidates(
+    orchestrator: Orchestrator,
+    candidates: list[Candidate],
+    key_prefix: str,
+) -> None:
+    for position, candidate in enumerate(candidates):
         with st.container(border=True):
             name_col, action_col = st.columns([5, 1])
             with name_col:
-                title_line = f"**{c.title}**"
-                if i == 0:
+                title_line = f"**{candidate.title}**"
+                if position == 0:
                     title_line += "  🏆 *Best match*"
                 st.markdown(title_line)
 
-                # A match on a former name is shown explicitly: the user typed
-                # one name and is being offered a company registered under
-                # another, which they can't verify unless we say why.
-                if c.is_previous_name:
-                    st.caption(f"↩︎ matched on former name: *{c.matched_name}*")
+                if candidate.is_previous_name:
+                    st.caption(
+                        f"↩︎ matched on former name: *{candidate.matched_name}*"
+                    )
 
-                status_dot = "🟢" if c.status == "active" else "⚪"
+                status_dot = "🟢" if candidate.status == "active" else "⚪"
                 meta = [
-                    f"{status_dot} Status: {c.status}",
-                    f"Company no.: {c.company_number}",
+                    f"{status_dot} Status: {candidate.status}",
+                    f"Company no.: {candidate.company_number}",
                 ]
-                if c.incorporation_date:
-                    meta.append(f"Incorporated: {c.incorporation_date.isoformat()}")
-                if c.postcode:
-                    meta.append(f"Postcode: {c.postcode}")
+                if candidate.incorporation_date:
+                    meta.append(
+                        f"Incorporated: {candidate.incorporation_date.isoformat()}"
+                    )
+                if candidate.postcode:
+                    meta.append(f"Postcode: {candidate.postcode}")
                 st.caption("  ·  ".join(meta))
             with action_col:
-                if st.button("Select", key=f"{key_prefix}_{c.company_number}"):
+                if st.button(
+                    "Select",
+                    key=f"{key_prefix}_{candidate.company_number}",
+                ):
                     with st.spinner("Fetching company profile..."):
-                        st.session_state.resolved_company = orchestrator.get_company_profile(c.company_number)
+                        st.session_state.resolved_company = (
+                            orchestrator.get_company_profile(
+                                candidate.company_number
+                            )
+                        )
                     st.session_state.candidates = None
                     st.session_state.can_suggest = False
                     st.session_state.suggestion = None
@@ -72,17 +89,7 @@ st.caption(
     "citation-backed underwriting intelligence report."
 )
 
-for key, default in [
-    ("resolved_company", None),
-    ("candidates", None),
-    ("corrected_query", None),
-    ("search_text", ""),
-    ("can_suggest", False),
-    ("suggestion", None),
-    ("showing_suggestion", False),
-    ("no_suggestion_found", False),
-    ("report_markdown", None),
-]:
+for key, default in _SESSION_DEFAULTS.items():
     if key not in st.session_state:
         st.session_state[key] = default
 
@@ -113,9 +120,6 @@ if submitted:
         st.session_state.search_text = user_input
         st.session_state.can_suggest = result.can_suggest
 
-# Asking costs an LLM call, so the question comes first: on a confident match
-# the list below is usually the right one, and only the user knows when it
-# isn't. Nothing is spent until they say so.
 if st.session_state.can_suggest and not st.session_state.suggestion:
     prompt_col, yes_col = st.columns([5, 1])
     with prompt_col:
@@ -127,7 +131,6 @@ if st.session_state.can_suggest and not st.session_state.suggestion:
                     st.session_state.search_text,
                     [c.company_number for c in st.session_state.candidates],
                 )
-            # Asked and answered - a second click would only buy the same reply.
             st.session_state.can_suggest = False
             st.session_state.showing_suggestion = st.session_state.suggestion is not None
             st.session_state.no_suggestion_found = st.session_state.suggestion is None
@@ -139,7 +142,6 @@ if st.session_state.no_suggestion_found:
         "spelling, the full registered name, or the registration number."
     )
 
-# Re-offering the answer already paid for, after the user backs out of it.
 if st.session_state.suggestion and not st.session_state.showing_suggestion:
     prompt_col, yes_col = st.columns([5, 1])
     with prompt_col:
@@ -153,8 +155,6 @@ if st.session_state.candidates:
     showing_suggestion = st.session_state.showing_suggestion and st.session_state.suggestion
     if showing_suggestion:
         shown_candidates = st.session_state.suggestion.candidates
-        # Without a way back, a wrong guess would strand the user on results
-        # for a query they never typed, with only a re-search to escape.
         msg_col, back_col = st.columns([5, 1])
         with msg_col:
             st.info(f"Showing results for **{st.session_state.suggestion.query}**.")
@@ -167,15 +167,17 @@ if st.session_state.candidates:
         if st.session_state.corrected_query:
             st.info(
                 f"No convincing matches for that spelling - showing results for "
-                f"**'{st.session_state.corrected_query}'** instead. Please confirm the right company below."
+                f"**'{st.session_state.corrected_query}'** instead. Please confirm "
+                "the right company below."
             )
 
     match_count = len(shown_candidates)
     st.warning(
-        f"Found {match_count} possible {'match' if match_count == 1 else 'matches'} - please confirm "
+        f"Found {match_count} possible "
+        f"{'match' if match_count == 1 else 'matches'} - please confirm "
         "the correct company before a report is generated."
     )
-    _render_candidates(shown_candidates, key_prefix="select")
+    _render_candidates(orchestrator, shown_candidates, key_prefix="select")
 
 if st.session_state.resolved_company and not st.session_state.candidates:
     profile = st.session_state.resolved_company

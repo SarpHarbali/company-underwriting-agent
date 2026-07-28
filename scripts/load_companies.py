@@ -29,9 +29,9 @@ import os
 import re
 import sys
 import zipfile
+from collections.abc import Iterator
 from datetime import date, datetime
 from pathlib import Path
-from typing import Iterator
 
 import psycopg
 import requests
@@ -173,7 +173,12 @@ def _flush(conn: psycopg.Connection, company_rows: list, index_rows: list) -> No
     index_rows.clear()
 
 
-def _load_rows(conn: psycopg.Connection, archive: Path, limit: int | None, active_only: bool) -> None:
+def _load_rows(
+    conn: psycopg.Connection,
+    archive: Path,
+    limit: int | None,
+    active_only: bool,
+) -> None:
     zip_file, reader = _open_csv(archive)
     try:
         positions = _column_positions(next(reader))
@@ -276,20 +281,42 @@ def _build_indexes(conn: psycopg.Connection) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--database-url", default=os.environ.get("DATABASE_URL"),
-                        help="Postgres connection string (defaults to $DATABASE_URL)")
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--database-url",
+        default=os.environ.get("DATABASE_URL"),
+        help="Postgres connection string (defaults to $DATABASE_URL)",
+    )
     parser.add_argument("--zip", type=Path, help="Use an already-downloaded bulk zip")
-    parser.add_argument("--download-dir", type=Path, default=Path("data"),
-                        help="Where to cache the download (default: ./data)")
-    parser.add_argument("--limit", type=int,
-                        help="Load only the first N companies - for a small demo database")
-    parser.add_argument("--active-only", action="store_true",
-                        help="Skip companies whose status isn't 'active', roughly halving the database")
-    parser.add_argument("--recreate", action="store_true",
-                        help="Drop and rebuild the tables instead of refusing to load over existing data")
-    parser.add_argument("--skip-indexes", action="store_true",
-                        help="Load rows without building indexes (resolution will be unusably slow)")
+    parser.add_argument(
+        "--download-dir",
+        type=Path,
+        default=Path("data"),
+        help="Where to cache the download (default: ./data)",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="Load only the first N companies - for a small demo database",
+    )
+    parser.add_argument(
+        "--active-only",
+        action="store_true",
+        help="Skip companies whose status isn't 'active'",
+    )
+    parser.add_argument(
+        "--recreate",
+        action="store_true",
+        help="Drop and rebuild tables instead of refusing to load over existing data",
+    )
+    parser.add_argument(
+        "--skip-indexes",
+        action="store_true",
+        help="Load rows without indexes (resolution will be unusably slow)",
+    )
     args = parser.parse_args()
 
     if not args.database_url:

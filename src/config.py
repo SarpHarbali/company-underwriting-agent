@@ -13,9 +13,6 @@ load_dotenv()
 @dataclass(frozen=True)
 class Settings:
     companies_house_api_key: str
-    # Postgres holding the loaded Companies House bulk data. Required: name
-    # resolution reads from it, and an empty or absent database would degrade
-    # to "no company matches anything" rather than to a slower fallback.
     database_url: str
     openai_api_key: str
     openai_model: str
@@ -23,10 +20,10 @@ class Settings:
     max_auditor_turns: int
     web_search_context_size: str
     openai_agents_tracing_enabled: bool = False
-    # Companies House migrated these hosts from the bare *.gov.uk domain to
-    # *.company-information.service.gov.uk; the old host no longer resolves.
     companies_house_base_url: str = "https://api.company-information.service.gov.uk"
-    companies_house_public_base_url: str = "https://find-and-update.company-information.service.gov.uk"
+    companies_house_public_base_url: str = (
+        "https://find-and-update.company-information.service.gov.uk"
+    )
 
 
 def _require(name: str) -> str:
@@ -47,11 +44,12 @@ def _choice(name: str, default: str, allowed: set[str]) -> str:
     return value
 
 
-def _positive_int(name: str, default: str, fallback_name: str | None = None) -> int:
-    raw = os.environ.get(name)
-    if raw is None and fallback_name is not None:
-        raw = os.environ.get(fallback_name)
-    value = int(raw or default)
+def _positive_int(name: str, default: str) -> int:
+    raw = os.environ.get(name, default)
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"'{name}' must be an integer.") from exc
     if value < 1:
         raise RuntimeError(f"'{name}' must be at least 1.")
     return value
@@ -77,11 +75,7 @@ def load_settings() -> Settings:
         database_url=_require("DATABASE_URL"),
         openai_api_key=_require("OPENAI_API_KEY"),
         openai_model=os.environ.get("OPENAI_MODEL", "gpt-4.1"),
-        max_research_turns=_positive_int(
-            "MAX_RESEARCH_TURNS",
-            "8",
-            fallback_name="MAX_RESEARCH_TOOL_CALLS",
-        ),
+        max_research_turns=_positive_int("MAX_RESEARCH_TURNS", "8"),
         max_auditor_turns=_positive_int("MAX_AUDITOR_TURNS", "2"),
         web_search_context_size=_choice(
             "WEB_SEARCH_CONTEXT_SIZE",

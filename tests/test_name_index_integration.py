@@ -64,14 +64,25 @@ def repository():
             conn.execute(SCHEMA_SQL)
             row_id = 0
             for number, name, previous_names, status, year in _FIXTURES:
-                for filed_name, is_previous in [(name, False)] + [(p, True) for p in previous_names]:
+                filed_names = [(name, False)] + [
+                    (previous_name, True) for previous_name in previous_names
+                ]
+                for filed_name, is_previous in filed_names:
                     row_id += 1
                     name_norm, name_stem = normalised_forms(filed_name)
                     conn.execute(
                         "INSERT INTO companies (id, company_number, company_name,"
                         " is_previous_name, company_status, incorporation_date, postcode)"
                         " VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                        (row_id, number, filed_name, is_previous, status, date(year, 1, 1), "N1 1AA"),
+                        (
+                            row_id,
+                            number,
+                            filed_name,
+                            is_previous,
+                            status,
+                            date(year, 1, 1),
+                            "N1 1AA",
+                        ),
                     )
                     conn.execute(
                         "INSERT INTO company_name_index (company_row_id, name_norm, name_stem)"

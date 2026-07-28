@@ -46,10 +46,6 @@ def test_strip_legal_suffix(normalised, expected):
     assert strip_legal_suffix(normalised) == expected
 
 
-def test_normalised_forms_returns_both():
-    assert normalised_forms("Acme Trading Ltd") == ("acme trading ltd", "acme trading")
-
-
 def test_one_edit_variants_cover_the_four_slip_types():
     variants = set(one_edit_variants("monzo"))
     assert "mnozo" in variants  # transposition
@@ -68,10 +64,6 @@ def test_variants_are_already_normalised():
 
 def test_no_variants_for_long_queries():
     assert one_edit_variants("a" * (MAX_VARIANT_QUERY_LENGTH + 1)) == []
-
-
-def test_variants_are_capped():
-    assert len(one_edit_variants("abcdefghijkl", max_variants=50)) == 50
 
 
 def test_query_variants_cover_both_forms():

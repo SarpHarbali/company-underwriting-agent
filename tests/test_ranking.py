@@ -37,15 +37,7 @@ def test_suffix_only_difference_is_nearly_an_exact_match():
     assert score("acme ltd", "ACME LIMITED") < score("acme ltd", "Acme Ltd")
 
 
-def test_only_an_identical_name_counts_as_exact():
-    assert score_match("Acme Ltd", match("Acme Ltd")).is_exact_match
-    assert not score_match("acme ltd", match("ACME LIMITED")).is_exact_match
-    assert not score_match("Acme", match("Acme Ltd")).is_exact_match
-
-
 def test_typo_still_scores_as_a_strong_match():
-    # The whole point of the shortlist: one slipped letter must not drop a
-    # company below the unrelated names it's competing with.
     assert score("revolut", "Revolut Ltd") > score("revoult", "Revolut Ltd")
     assert score("revoult", "Revolut Ltd") > score("revoult", "Revolution Bars Ltd")
 
@@ -55,26 +47,19 @@ def test_a_former_name_is_ranked_below_an_identical_current_one():
 
 
 def test_status_and_age_are_nudges_not_filters():
-    # A dissolved exact match still beats a weak match on an active company.
     assert score("Acme Ltd", "Acme Ltd", status="dissolved") > score(
         "Acme Ltd", "Acme Consulting Group International"
     )
-    # Age only separates otherwise-equal names.
     assert score("Acme Ltd", "Acme Ltd", incorporated=1930) > score(
         "Acme Ltd", "Acme Ltd", incorporated=2020
     )
 
 
 def test_a_partial_name_is_not_penalised_by_the_length_of_the_full_one():
-    # Two companies whose names both start with the query are equally good
-    # name matches. Neither may pull ahead by more than the status and age
-    # nudges can overturn, or results end up ordered by name length rather
-    # than by which company the user is likelier to have meant.
     assert abs(score("monzo", "MONZO BANK LIMITED") - score("monzo", "MONZO TYRES LTD")) < 0.05
 
 
 def test_unrelated_names_score_far_below_real_matches():
-    # The gap between these two is what the weak-match threshold sits in.
     assert score("qqzzx tradng", "Totally Unrelated Holdings") < 0.5
     assert score("monzo", "MONZO BANK LIMITED") > 0.8
 

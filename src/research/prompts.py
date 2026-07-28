@@ -103,17 +103,29 @@ def specialist_input(
     track: ResearchTrack,
     company: dict[str, Any],
     public_url: str,
+    filings_briefing: str,
 ) -> str:
     return f"""Research the verified company below for the {track.label.lower()} section.
 
 VERIFIED COMPANY
 {company_context(company, public_url)}
 
+COMPANIES HOUSE OFFICIAL RECORD (already retrieved by the application)
+{filings_briefing}
+
 TRACK OBJECTIVE
 {track.objective}
 
 The Companies House profile above was fetched directly by the application and may
-be cited with that exact URL. Do not research or report on a similarly named entity."""
+be cited with that exact URL. Do not research or report on a similarly named entity.
+
+Use the official record as background to direct your own research - for example to
+identify a parent company or group worth researching, gauge the company's scale and
+age, confirm that a web source refers to this exact entity rather than a namesake,
+or spot events worth investigating such as recent director changes or newly
+registered charges. Do NOT restate those official-record facts as your own
+findings: the application adds them to the report separately, so repeating them
+here would duplicate them. Report only what your web research adds on top."""
 
 
 def specialist_structuring_instructions(track: ResearchTrack) -> str:
@@ -155,7 +167,12 @@ evidence was captured."""
 AUDITOR_INSTRUCTIONS = """You are the evidence auditor for a UK credit-underwriting
 report. Three specialist agents have produced structured findings, and the
 application has already removed any specialist citation whose URL was not present
-in the raw web-search evidence.
+in the raw web-search evidence. The business-model and quality-signals evidence
+also include claims sourced directly from Companies House official registers:
+officers, filing history, persons with significant control, and registered
+charges. These are primary legal records, not web research, so treat them as
+maximally authoritative and do not demand independent corroboration as you
+would for a web claim.
 
 Your task is to produce the only evidence that may enter the final report:
 - Merge exact and near-duplicate claims, retaining all supporting source IDs.

@@ -1,6 +1,4 @@
-"""Assembles the final markdown report from Companies House facts + the
-structured research output. Pure formatting - no LLM calls here, so the
-rendered report is a deterministic function of already-grounded data."""
+"""Render Companies House data and audited research as Markdown."""
 
 from __future__ import annotations
 
@@ -21,7 +19,7 @@ def _fmt_address(address: dict[str, Any] | None) -> str:
         address.get("postal_code"),
         address.get("country"),
     ]
-    return ", ".join(p for p in parts if p) or "Not available"
+    return ", ".join(part for part in parts if part) or "Not available"
 
 
 def build_official_record_markdown(company_profile: dict[str, Any], public_url: str) -> str:
@@ -40,7 +38,9 @@ def build_official_record_markdown(company_profile: dict[str, Any], public_url: 
     ]
     if previous_names:
         names = "; ".join(
-            f"{n.get('name', '?')} (until {n.get('ceased_on', '?')})" for n in previous_names
+            f"{previous_name.get('name', '?')} "
+            f"(until {previous_name.get('ceased_on', '?')})"
+            for previous_name in previous_names
         )
         lines.append(f"**Previous names:** {names}")
     return "\n\n".join(lines)
@@ -58,7 +58,10 @@ def _render_section(title: str, section: ReportSection) -> str:
             for source_id in point.source_ids
         )
     )
-    summary_refs = "".join(f"[{sid}]" for sid in summary_ids) or "[no validated evidence]"
+    summary_refs = (
+        "".join(f"[{source_id}]" for source_id in summary_ids)
+        or "[no validated evidence]"
+    )
     lines = [
         f"## {title}  _(confidence: {_confidence_label(section.confidence)})_",
         "",
@@ -67,20 +70,20 @@ def _render_section(title: str, section: ReportSection) -> str:
     ]
     if section.key_points:
         for point in section.key_points:
-            refs = "".join(f"[{sid}]" for sid in point.source_ids) or "[no direct source]"
-            lines.append(f"- {point.claim} {refs} _(confidence: {_confidence_label(point.confidence)})_")
-        lines.append("")
-    if section.evidence_gaps:
-        lines.append("**Evidence gaps for this section:**")
-        for gap in section.evidence_gaps:
-            lines.append(f"- {gap}")
+            refs = (
+                "".join(f"[{source_id}]" for source_id in point.source_ids)
+                or "[no direct source]"
+            )
+            lines.append(
+                f"- {point.claim} {refs} "
+                f"_(confidence: {_confidence_label(point.confidence)})_"
+            )
         lines.append("")
     return "\n".join(lines)
 
 
 def build_report_markdown(
     company_profile: dict[str, Any],
-    public_url: str,
     research_result: ResearchResult,
 ) -> str:
     report = research_result.report
@@ -108,10 +111,12 @@ def build_report_markdown(
         "",
     ]
 
-    all_gaps = (
-        report.business_model.evidence_gaps
-        + report.competitive_landscape.evidence_gaps
-        + report.quality_signals.evidence_gaps
+    all_gaps = list(
+        dict.fromkeys(
+            report.business_model.evidence_gaps
+            + report.competitive_landscape.evidence_gaps
+            + report.quality_signals.evidence_gaps
+        )
     )
     if all_gaps:
         for gap in all_gaps:
@@ -148,7 +153,9 @@ def build_report_markdown(
         if research_result.audit.contradictions:
             parts.append("- Material contradictions flagged:")
             for contradiction in research_result.audit.contradictions:
-                refs = "".join(f"[{sid}]" for sid in contradiction.source_ids)
+                refs = "".join(
+                    f"[{source_id}]" for source_id in contradiction.source_ids
+                )
                 parts.append(
                     f"  - **{contradiction.topic}:** {contradiction.description} "
                     f"{refs}".rstrip()

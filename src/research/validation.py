@@ -12,24 +12,18 @@ from src.research.schemas import (
     RemovedClaim,
     ReportSection,
     SpecialistFindings,
-    StructuredReport,
 )
 from src.research.sources import SourceRegistry
 
 
 def register_run_sources(run_result: Any, registry: SourceRegistry) -> int:
-    """Register URLs that occur in the SDK's raw web-search response payloads.
-
-    ``response_include=["web_search_call.action.sources"]`` supplies the search
-    sources. URL-citation annotations are captured as well because they include
-    better human-readable titles.
-    """
-    calls = 0
+    """Register sources from raw web-search calls and citation annotations."""
+    web_search_calls = 0
     for response in getattr(run_result, "raw_responses", ()) or ():
         for item in getattr(response, "output", ()) or ():
             item_type = getattr(item, "type", None)
             if item_type == "web_search_call":
-                calls += 1
+                web_search_calls += 1
                 action = getattr(item, "action", None)
                 for source in getattr(action, "sources", None) or ():
                     url = getattr(source, "url", None)
@@ -50,7 +44,7 @@ def register_run_sources(run_result: Any, registry: SourceRegistry) -> int:
                                 getattr(annotation, "title", None) or url,
                                 url,
                             )
-    return calls
+    return web_search_calls
 
 
 def validate_specialist_findings(
@@ -104,6 +98,34 @@ def validate_specialist_findings(
     )
 
 
+def register_official_findings(
+    findings: SpecialistFindings,
+    registry: SourceRegistry,
+) -> ReportSection:
+    """Register findings built directly from official records."""
+    points: list[KeyPoint] = []
+    for finding in findings.claims:
+        source_ids = list(
+            dict.fromkeys(
+                registry.add("companies_house", citation.title, citation.url)
+                for citation in finding.citations
+            )
+        )
+        points.append(
+            KeyPoint(
+                claim=finding.claim,
+                source_ids=source_ids,
+                confidence=finding.confidence,
+            )
+        )
+    return ReportSection(
+        summary=findings.summary,
+        key_points=points,
+        confidence=findings.confidence,
+        evidence_gaps=list(findings.evidence_gaps),
+    )
+
+
 def validate_audit(
     audit: EvidenceAudit,
     registry: SourceRegistry,
@@ -119,12 +141,18 @@ def validate_audit(
     def clean_section(section: ReportSection) -> ReportSection:
         points: list[KeyPoint] = []
         for point in section.key_points:
-            ids = list(dict.fromkeys(sid for sid in point.source_ids if sid in valid_ids))
-            if ids:
+            source_ids = list(
+                dict.fromkeys(
+                    source_id
+                    for source_id in point.source_ids
+                    if source_id in valid_ids
+                )
+            )
+            if source_ids:
                 points.append(
                     KeyPoint(
                         claim=point.claim,
-                        source_ids=ids,
+                        source_ids=source_ids,
                         confidence=point.confidence,
                     )
                 )
@@ -157,7 +185,11 @@ def validate_audit(
             topic=item.topic,
             description=item.description,
             source_ids=list(
-                dict.fromkeys(sid for sid in item.source_ids if sid in valid_ids)
+                dict.fromkeys(
+                    source_id
+                    for source_id in item.source_ids
+                    if source_id in valid_ids
+                )
             ),
         )
         for item in audit.contradictions
@@ -170,19 +202,3 @@ def validate_audit(
         contradictions=contradictions,
         removed_claims=list(audit.removed_claims) + invalid_audit_claims,
     )
-
-
-def drop_invalid_citations(
-    report: StructuredReport,
-    registry: SourceRegistry,
-) -> StructuredReport:
-    """Compatibility helper for callers that only have a StructuredReport."""
-    placeholder = EvidenceAudit(
-        business_model=report.business_model,
-        competitive_landscape=report.competitive_landscape,
-        quality_signals=report.quality_signals,
-        duplicates_merged=[],
-        contradictions=[],
-        removed_claims=[],
-    )
-    return validate_audit(placeholder, registry).structured_report()

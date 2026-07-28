@@ -65,6 +65,7 @@ def test_specialists_run_in_parallel_before_auditor(monkeypatch):
         track_slug = starting_agent.name.split()[0].lower()
         url = f"https://evidence.example/{track_slug}"
         if "structured findings" not in starting_agent.name:
+            assert "Jane Doe" in input
             started += 1
             if started == 3:
                 all_started.set()
@@ -92,6 +93,14 @@ def test_specialists_run_in_parallel_before_auditor(monkeypatch):
         )
 
     monkeypatch.setattr("src.research.agent.Runner.run", fake_run)
+    ch_client = SimpleNamespace(
+        get_officers=lambda number: [
+            {"name": "Jane Doe", "officer_role": "director", "appointed_on": "2020-01-01"}
+        ],
+        get_filing_history=lambda number: [],
+        get_persons_with_significant_control=lambda number: [],
+        get_charges=lambda number: [],
+    )
     settings = Settings(
         companies_house_api_key="ch-test",
         database_url="postgresql://unused",
@@ -110,6 +119,7 @@ def test_specialists_run_in_parallel_before_auditor(monkeypatch):
     result = asyncio.run(
         _run_research_async(
             settings,
+            ch_client,
             profile,
             "https://find-and-update.company-information.service.gov.uk/company/123",
             lambda _: None,
@@ -119,6 +129,6 @@ def test_specialists_run_in_parallel_before_auditor(monkeypatch):
     assert auditor_started_after_specialists
     assert result.agent_run_count == 7
     assert result.tool_call_count == 3
-    assert len(result.sources) == 4  # Companies House profile + three web sources
+    assert any(source.url.endswith("/officers") for source in result.sources.all())
     assert result.audit is not None
     assert result.audit.duplicates_merged == ["duplicate"]

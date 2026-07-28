@@ -1,10 +1,4 @@
-"""Structured contracts for specialist research and evidence auditing.
-
-The three specialist agents cite URLs because they work independently. Their
-citations are converted to stable ``SourceRegistry`` IDs only when the URL is
-present in the raw web-search payload. The auditor then works exclusively with
-those validated IDs and returns the final report sections.
-"""
+"""Structured contracts for research findings and evidence audits."""
 
 from __future__ import annotations
 
@@ -45,8 +39,6 @@ class StructuredReport(BaseModel):
 
 
 class SourceCitation(BaseModel):
-    """A source a specialist says supports one finding."""
-
     model_config = ConfigDict(extra="forbid")
 
     title: str
@@ -54,8 +46,6 @@ class SourceCitation(BaseModel):
 
 
 class SpecialistClaim(BaseModel):
-    """One atomic, independently citable finding from a specialist."""
-
     model_config = ConfigDict(extra="forbid")
 
     claim: str
@@ -64,8 +54,6 @@ class SpecialistClaim(BaseModel):
 
 
 class SpecialistFindings(BaseModel):
-    """Structured output shared by all three specialist agents."""
-
     model_config = ConfigDict(extra="forbid")
 
     summary: str
@@ -75,8 +63,6 @@ class SpecialistFindings(BaseModel):
 
 
 class Contradiction(BaseModel):
-    """Conflicting evidence the auditor could not safely reconcile."""
-
     model_config = ConfigDict(extra="forbid")
 
     topic: str
@@ -85,8 +71,6 @@ class Contradiction(BaseModel):
 
 
 class RemovedClaim(BaseModel):
-    """A claim rejected by the auditor and why it was rejected."""
-
     model_config = ConfigDict(extra="forbid")
 
     claim: str

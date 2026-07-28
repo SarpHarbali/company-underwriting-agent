@@ -1,9 +1,4 @@
-"""Thin end-to-end coordinator wiring resolution -> research -> report building.
-
-Kept deliberately dumb: all the interesting logic lives in the modules it calls.
-This exists so the Streamlit UI doesn't need to know about OpenAI/Companies House
-clients directly.
-"""
+"""Coordinate company resolution, research and report rendering."""
 
 from __future__ import annotations
 
@@ -59,13 +54,11 @@ class Orchestrator:
     def suggest_alternative(
         self, user_input: str, listed_numbers: Collection[str] = ()
     ) -> SuggestedAlternative | None:
-        """Ask what else a search might have meant - only when the user asks for it."""
         return suggest_alternative(
             self.name_repository, user_input, self._suggest_query, listed_numbers
         )
 
     def get_company_profile(self, company_number: str) -> dict:
-        """Fetch a profile directly - used when the user confirms a disambiguation candidate."""
         return self.ch_client.get_company_profile(company_number)
 
     def generate_report(
@@ -79,6 +72,5 @@ class Orchestrator:
             company_profile=company_profile,
             progress=progress,
         )
-        public_url = self.ch_client.public_company_url(company_profile["company_number"])
-        markdown = build_report_markdown(company_profile, public_url, result)
+        markdown = build_report_markdown(company_profile, result)
         return GeneratedReport(markdown=markdown, research_result=result)

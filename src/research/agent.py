@@ -1,11 +1,4 @@
-"""Parallel specialist research followed by a closed-registry evidence audit.
-
-Three OpenAI Agents SDK specialists research independent report tracks in
-parallel. Their URL citations are accepted only when the URL occurs in the raw
-hosted web-search response. A fourth agent then audits the resulting ID-backed
-evidence, merges duplicates, flags contradictions and removes unsupported
-claims. The report builder sees only that audited output.
-"""
+"""Parallel web research followed by a closed-registry evidence audit."""
 
 from __future__ import annotations
 
@@ -18,6 +11,11 @@ from agents.models.openai_provider import OpenAIProvider
 
 from src.companies_house.client import CompaniesHouseClient
 from src.config import Settings
+from src.research.filings import (
+    empty_filings_evidence,
+    filings_briefing,
+    gather_filings_findings,
+)
 from src.research.prompts import (
     AUDITOR_INSTRUCTIONS,
     RESEARCH_TRACKS,
@@ -32,13 +30,12 @@ from src.research.schemas import (
     Confidence,
     EvidenceAudit,
     RemovedClaim,
-    ReportSection,
     SpecialistFindings,
     StructuredReport,
 )
 from src.research.sources import SourceRegistry
 from src.research.validation import (
-    drop_invalid_citations,
+    register_official_findings,
     register_run_sources,
     validate_audit,
     validate_specialist_findings,
@@ -49,7 +46,7 @@ class ProgressCallback(Protocol):
     def __call__(self, message: str) -> None: ...
 
 
-def _noop_progress(message: str) -> None:
+def _noop_progress(_message: str) -> None:
     pass
 
 
@@ -57,7 +54,6 @@ def _noop_progress(message: str) -> None:
 class ResearchResult:
     report: StructuredReport
     sources: SourceRegistry
-    transcript_notes: list[str] = field(default_factory=list)
     tool_call_count: int = 0
     hit_tool_call_budget: bool = False
     audit: EvidenceAudit | None = None
@@ -70,7 +66,7 @@ class ResearchResult:
 class _SpecialistRun:
     track: ResearchTrack
     findings: SpecialistFindings
-    run_result: Any | None
+    research_run: Any | None
     warning: str | None = None
     agent_run_count: int = 0
 
@@ -89,6 +85,7 @@ async def _run_specialist(
     settings: Settings,
     company_profile: dict[str, Any],
     public_url: str,
+    filings_context: str,
     run_config: RunConfig,
     progress: ProgressCallback,
 ) -> _SpecialistRun:
@@ -106,7 +103,7 @@ async def _run_specialist(
     try:
         research_result = await Runner.run(
             agent,
-            specialist_input(track, company_profile, public_url),
+            specialist_input(track, company_profile, public_url, filings_context),
             max_turns=settings.max_research_turns,
             run_config=run_config,
         )
@@ -146,7 +143,7 @@ async def _run_specialist(
         return _SpecialistRun(
             track=track,
             findings=findings,
-            run_result=research_result,
+            research_run=research_result,
             agent_run_count=2,
         )
     except Exception as exc:  # noqa: BLE001 - partial tracks are surfaced as gaps
@@ -155,14 +152,33 @@ async def _run_specialist(
         return _SpecialistRun(
             track=track,
             findings=_empty_findings(track, reason),
-            run_result=research_result,
+            research_run=research_result,
             warning=reason,
             agent_run_count=1 if research_result is not None else 0,
         )
 
 
+async def _run_filings(
+    ch_client: CompaniesHouseClient,
+    company_number: str,
+    public_url: str,
+    progress: ProgressCallback,
+) -> tuple[dict[str, SpecialistFindings], str | None]:
+    try:
+        evidence = await asyncio.to_thread(
+            gather_filings_findings, ch_client, company_number, public_url
+        )
+        progress("Companies House officers, filings, PSC and charges retrieved.")
+        return evidence, None
+    except Exception as exc:  # noqa: BLE001 - reported as an evidence gap
+        reason = f"Companies House filings lookup failed: {type(exc).__name__}: {exc}"
+        progress(reason)
+        return empty_filings_evidence(reason), reason
+
+
 async def _run_research_async(
     settings: Settings,
+    ch_client: CompaniesHouseClient,
     company_profile: dict[str, Any],
     public_url: str,
     progress: ProgressCallback,
@@ -186,6 +202,13 @@ async def _run_research_async(
         },
     )
 
+    company_number = str(company_profile["company_number"])
+    progress("Fetching Companies House officers, filings, PSC and charges...")
+    filings_evidence, filings_warning = await _run_filings(
+        ch_client, company_number, public_url, progress
+    )
+    briefing = filings_briefing(filings_evidence)
+
     progress("Starting three specialist web-research agents in parallel...")
     specialist_runs = await asyncio.gather(
         *(
@@ -194,6 +217,7 @@ async def _run_research_async(
                 settings,
                 company_profile,
                 public_url,
+                briefing,
                 specialist_config,
                 progress,
             )
@@ -203,9 +227,9 @@ async def _run_research_async(
 
     web_search_calls = 0
     for specialist_run in specialist_runs:
-        if specialist_run.run_result is not None:
+        if specialist_run.research_run is not None:
             web_search_calls += register_run_sources(
-                specialist_run.run_result,
+                specialist_run.research_run,
                 registry,
             )
 
@@ -221,6 +245,14 @@ async def _run_research_async(
         pre_audit_removals.extend(removed)
         if specialist_run.warning:
             warnings.append(specialist_run.warning)
+
+    for section_key, section_findings in filings_evidence.items():
+        official_section = register_official_findings(section_findings, registry)
+        official_data = official_section.model_dump(mode="json")
+        evidence[section_key]["key_points"].extend(official_data["key_points"])
+        evidence[section_key]["evidence_gaps"].extend(official_data["evidence_gaps"])
+    if filings_warning:
+        warnings.append(filings_warning)
 
     auditor_source_ids = {
         source_id
@@ -285,7 +317,6 @@ async def _run_research_async(
     return ResearchResult(
         report=audit.structured_report(),
         sources=registry,
-        transcript_notes=[],
         tool_call_count=web_search_calls,
         hit_tool_call_budget=any(
             "MaxTurnsExceeded" in warning for warning in warnings
@@ -309,16 +340,9 @@ def run_research(
     return asyncio.run(
         _run_research_async(
             settings=settings,
+            ch_client=ch_client,
             company_profile=company_profile,
             public_url=public_url,
             progress=progress,
         )
     )
-
-
-def _drop_invalid_citations(
-    report: StructuredReport,
-    registry: SourceRegistry,
-) -> StructuredReport:
-    """Backward-compatible name for the closed-registry citation filter."""
-    return drop_invalid_citations(report, registry)

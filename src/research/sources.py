@@ -1,10 +1,4 @@
-"""Registry that assigns a stable numeric ID to every source the agent actually saw.
-
-The final structured-synthesis step is constrained to only cite IDs that exist in
-this registry, so a citation in the rendered report always resolves to a real
-Companies House page or a URL the web_search tool actually returned - never a
-model-invented source.
-"""
+"""Stable source IDs for citation validation and report rendering."""
 
 from __future__ import annotations
 
@@ -44,7 +38,7 @@ def canonical_url(url: str) -> str:
 @dataclass(frozen=True)
 class Source:
     id: int
-    kind: str  # "companies_house" | "web"
+    kind: str
     title: str
     url: str
 
@@ -71,16 +65,15 @@ class SourceRegistry:
         return self._url_to_id.get(canonical_url(url))
 
     def get(self, source_id: int) -> Source | None:
-        for source in self._sources:
-            if source.id == source_id:
-                return source
+        if 1 <= source_id <= len(self._sources):
+            return self._sources[source_id - 1]
         return None
 
     def all(self) -> list[Source]:
         return list(self._sources)
 
     def valid_ids(self) -> set[int]:
-        return {s.id for s in self._sources}
+        return {source.id for source in self._sources}
 
     def __len__(self) -> int:
         return len(self._sources)
