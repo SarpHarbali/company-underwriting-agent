@@ -51,7 +51,20 @@ def _confidence_label(confidence: Any) -> str:
 
 
 def _render_section(title: str, section: ReportSection) -> str:
-    lines = [f"## {title}  _(confidence: {_confidence_label(section.confidence)})_", "", section.summary, ""]
+    summary_ids = list(
+        dict.fromkeys(
+            source_id
+            for point in section.key_points
+            for source_id in point.source_ids
+        )
+    )
+    summary_refs = "".join(f"[{sid}]" for sid in summary_ids) or "[no validated evidence]"
+    lines = [
+        f"## {title}  _(confidence: {_confidence_label(section.confidence)})_",
+        "",
+        f"{section.summary} {summary_refs}",
+        "",
+    ]
     if section.key_points:
         for point in section.key_points:
             refs = "".join(f"[{sid}]" for sid in point.source_ids) or "[no direct source]"
@@ -73,6 +86,12 @@ def build_report_markdown(
     report = research_result.report
     name = company_profile.get("company_name", "Unknown company")
     number = company_profile.get("company_number", "unknown")
+    referenced_sources = [
+        source
+        for source in research_result.sources.all()
+        if research_result.validated_source_ids is None
+        or source.id in research_result.validated_source_ids
+    ]
 
     parts = [
         f"# Underwriting Intelligence Report: {name}",
@@ -107,16 +126,41 @@ def build_report_markdown(
             "higher budget for a company this complex."
         )
     parts.append(
-        f"- This report draws on {len(research_result.sources)} distinct sources "
-        f"({research_result.tool_call_count} research tool calls). Web sources reflect a "
+        f"- This report draws on {len(referenced_sources)} distinct validated sources "
+        f"({research_result.tool_call_count} web-search calls across "
+        f"{research_result.agent_run_count or 'multiple'} agent runs). Web sources reflect a "
         f"single point-in-time automated search and have not been independently verified."
     )
+    for warning in research_result.research_warnings:
+        parts.append(f"- Research warning: {warning}")
     parts.append("")
+
+    if research_result.audit is not None:
+        parts.append("## Evidence Audit")
+        parts.append("")
+        parts.append(
+            f"- Duplicate groups merged: {len(research_result.audit.duplicates_merged)}"
+        )
+        parts.append(
+            f"- Unsupported or unsuitable claims removed: "
+            f"{len(research_result.audit.removed_claims)}"
+        )
+        if research_result.audit.contradictions:
+            parts.append("- Material contradictions flagged:")
+            for contradiction in research_result.audit.contradictions:
+                refs = "".join(f"[{sid}]" for sid in contradiction.source_ids)
+                parts.append(
+                    f"  - **{contradiction.topic}:** {contradiction.description} "
+                    f"{refs}".rstrip()
+                )
+        else:
+            parts.append("- No material contradictions were flagged by the evidence auditor.")
+        parts.append("")
 
     parts.append("## References")
     parts.append("")
-    if research_result.sources.all():
-        for source in research_result.sources.all():
+    if referenced_sources:
+        for source in referenced_sources:
             kind_label = "Companies House" if source.kind == "companies_house" else "Web"
             parts.append(f"[{source.id}] ({kind_label}) [{source.title}]({source.url})")
     else:

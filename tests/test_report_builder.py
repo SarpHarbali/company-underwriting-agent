@@ -1,6 +1,14 @@
 from src.report.builder import build_official_record_markdown, build_report_markdown
 from src.research.agent import ResearchResult
-from src.research.schemas import Confidence, KeyPoint, ReportSection, StructuredReport
+from src.research.schemas import (
+    Confidence,
+    Contradiction,
+    EvidenceAudit,
+    KeyPoint,
+    RemovedClaim,
+    ReportSection,
+    StructuredReport,
+)
 from src.research.sources import SourceRegistry
 
 
@@ -66,3 +74,36 @@ def test_build_official_record_markdown_includes_key_fields():
     assert "Acme Ltd" in md
     assert "62012" in md
     assert "1 High St" in md
+
+
+def test_report_renders_audit_trail_and_only_validated_references():
+    result = _make_research_result()
+    result.sources.add("web", "Unused", "https://example.test/unused")
+    result.validated_source_ids = {1}
+    result.audit = EvidenceAudit(
+        business_model=result.report.business_model,
+        competitive_landscape=result.report.competitive_landscape,
+        quality_signals=result.report.quality_signals,
+        duplicates_merged=["Two equivalent market-position claims."],
+        contradictions=[
+            Contradiction(
+                topic="Customer sentiment",
+                description="Review sources disagree.",
+                source_ids=[1],
+            )
+        ],
+        removed_claims=[
+            RemovedClaim(claim="Unsupported", reason="No supporting source.")
+        ],
+    )
+
+    md = build_report_markdown(
+        {"company_name": "Acme Ltd", "company_number": "123"},
+        "https://public.example.test/company/123",
+        result,
+    )
+
+    assert "## Evidence Audit" in md
+    assert "Review sources disagree. [1]" in md
+    assert "Unsupported or unsuitable claims removed: 1" in md
+    assert "https://example.test/unused" not in md

@@ -1,93 +1,200 @@
-"""System prompts for the two-phase research agent."""
+"""Prompts for the parallel specialists and evidence-auditor agent."""
 
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass
 from typing import Any
 
 
-def research_system_prompt(company: dict[str, Any], public_url: str) -> str:
-    name = company.get("company_name", "the company")
-    number = company.get("company_number", "unknown")
-    status = company.get("company_status", "unknown")
-    incorporated = company.get("date_of_creation", "unknown")
-    sic_codes = ", ".join(company.get("sic_codes", []) or []) or "none listed"
+@dataclass(frozen=True)
+class ResearchTrack:
+    key: str
+    label: str
+    objective: str
+
+
+RESEARCH_TRACKS = (
+    ResearchTrack(
+        key="business_model",
+        label="Business model",
+        objective=(
+            "Establish what the company actually does, its products/services, how it "
+            "makes money, customer types, distribution model, and relevant geographies. "
+            "Separate facts from inference and do not infer a business model from SIC "
+            "codes alone."
+        ),
+    ),
+    ResearchTrack(
+        key="competitive_landscape",
+        label="Competitive landscape",
+        objective=(
+            "Assess the intensity of competition in the company's specific sector and "
+            "geographies. Identify relevant competitors or substitutes, barriers to entry, "
+            "customer switching or concentration factors, and explain why the resulting "
+            "competitive pressure matters to underwriting risk. Go beyond a competitor list."
+        ),
+    ),
+    ResearchTrack(
+        key="quality_signals",
+        label="Company quality signals",
+        objective=(
+            "Find and synthesise independent quality indicators such as customer reviews, "
+            "trade press, regulator or ombudsman records, awards, complaints, controversies, "
+            "and industry reputation. Assess signal strength, representativeness, recency, "
+            "and conflicts; absence of evidence is a gap, not a positive signal."
+        ),
+    ),
+)
+
+
+def company_context(company: dict[str, Any], public_url: str) -> str:
     address = company.get("registered_office_address", {}) or {}
     address_str = ", ".join(
-        part for part in [address.get("address_line_1"), address.get("locality"), address.get("postal_code")]
-        if part
+        value
+        for value in (
+            address.get("address_line_1"),
+            address.get("locality"),
+            address.get("region"),
+            address.get("postal_code"),
+            address.get("country"),
+        )
+        if value
     ) or "unknown"
-
-    return f"""You are an underwriting research analyst gathering evidence on a UK company
-for a credit/underwriting intelligence report. You are conducting due diligence,
-not writing marketing copy - be skeptical, precise, and evidence-driven.
-
-TARGET COMPANY (already verified - do not second-guess its identity):
-- Name: {name}
-- Companies House number: {number}
-- Status: {status}
-- Incorporated: {incorporated}
-- SIC codes: {sic_codes}
-- Registered office: {address_str}
-- Public record: {public_url}
-
-You must gather enough evidence to eventually support three report sections:
-1. Business model - what the company does, how it makes money, who its customers are.
-2. Competitive landscape - who it competes with, how intense that competition is
-   in its specific sector and geography, and why that matters for credit risk.
-3. Company quality signals - customer reviews, trade press, industry reputation,
-   complaints or controversies - with an honest read on how much real evidence exists.
-
-You have Companies House tools (filing history, officers, persons with significant
-control, charges) and a web_search tool. Use whichever tools are useful, in whatever
-order makes sense - you decide. Prefer specific, checkable sources (company website,
-trade press, review aggregators, regulator/industry pages) over generic summaries.
-Search using the company's legal name and, where helpful, its trading name if you
-discover one, plus qualifiers like its sector or "UK" to avoid confusing it with
-similarly-named companies elsewhere.
-
-Guidelines:
-- Only state things you can support with a tool result you actually received.
-  If you're not sure, say so - do not guess or extrapolate.
-- Stop gathering once you have enough to write a grounded report for all three
-  sections, or once further searches stop turning up new information. You do not
-  need to exhaust every tool - use judgement about when marginal evidence isn't
-  worth another call.
-- If a tool fails or returns nothing useful, note that and move on rather than
-  retrying indefinitely.
-- When you believe you have gathered enough evidence, stop calling tools and
-  reply with a short plain-text research summary (not the final report - a
-  structured extraction step will follow) covering what you found and what
-  remains uncertain or unfound for each of the three sections.
-"""
+    return "\n".join(
+        (
+            f"Legal name: {company.get('company_name', 'unknown')}",
+            f"Companies House number: {company.get('company_number', 'unknown')}",
+            f"Status: {company.get('company_status', 'unknown')}",
+            f"Incorporated: {company.get('date_of_creation', 'unknown')}",
+            f"SIC codes: {', '.join(company.get('sic_codes', []) or []) or 'none listed'}",
+            f"Registered office: {address_str}",
+            f"Verified Companies House profile: {public_url}",
+        )
+    )
 
 
-SYNTHESIS_SYSTEM_PROMPT = """You are producing the final structured underwriting
-report sections from research notes already gathered. You must not introduce any
-new facts, sources, or claims beyond what is in the research transcript provided.
+def specialist_instructions(track: ResearchTrack) -> str:
+    return f"""You are the {track.label.lower()} specialist in a UK credit-underwriting
+research workflow. Work only on your assigned track:
+
+{track.objective}
+
+Research requirements:
+- Use web search repeatedly and refine queries when initial results are weak.
+- Confirm that every source refers to the verified legal entity; use the company
+  number, legal name, trading names, sector and UK geography to avoid namesakes.
+- Prefer primary and authoritative sources, then reputable trade press and
+  established review/regulatory sources. Treat company-authored material as useful
+  for factual descriptions but weak evidence for independent quality judgements.
+- Make each factual statement atomic and attach a normal inline web citation.
+- Do not include a factual statement with no direct citation. Put missing,
+  ambiguous, stale or contradictory matters in an explicit evidence-gaps section.
+- Confidence is qualitative: high requires strong corroboration; medium is supported
+  but limited; low means a single, indirect, weak, old or potentially biased source.
+- Stop once the assigned track is adequately covered or further searches are no
+  longer producing material new evidence.
+
+Return concise research notes with inline web citations. A schema-enforced
+structuring step will follow, so do not emit JSON."""
+
+
+def specialist_input(
+    track: ResearchTrack,
+    company: dict[str, Any],
+    public_url: str,
+) -> str:
+    return f"""Research the verified company below for the {track.label.lower()} section.
+
+VERIFIED COMPANY
+{company_context(company, public_url)}
+
+TRACK OBJECTIVE
+{track.objective}
+
+The Companies House profile above was fetched directly by the application and may
+be cited with that exact URL. Do not research or report on a similarly named entity."""
+
+
+def specialist_structuring_instructions(track: ResearchTrack) -> str:
+    return f"""You are structuring the completed {track.label.lower()} research for
+an evidence-audited underwriting workflow.
 
 Rules:
-- Every key_point's source_ids must reference only IDs from the numbered source
-  list provided below. Never invent a source ID. If a claim has no supporting
-  source from the list, either omit the claim or list it in evidence_gaps instead.
-- confidence per key_point and per section should reflect how much and how
-  reliable the underlying evidence is - "low" if based on a single weak/indirect
-  source or inference, "high" only if multiple solid sources agree.
-- evidence_gaps should explicitly name what an underwriter would want to know
-  but which the research did not find (e.g. "no independent customer reviews
-  found", "no recent trade press coverage").
-- Be concise and specific. Avoid generic filler ("this is a growing market") -
-  every sentence should be checkable against a cited source or clearly flagged
-  as the model's own inference (in which case give it low confidence and no
-  source_ids, or better, put it in evidence_gaps).
-"""
+- Use only facts in RESEARCH NOTES.
+- Every claim must be atomic and directly supported by one or more entries in
+  AVAILABLE SOURCES.
+- Copy each cited title and URL exactly from AVAILABLE SOURCES. Never invent,
+  shorten, reconstruct or alter a URL.
+- Omit unsupported claims and surface missing, thin or conflicting evidence in
+  evidence_gaps.
+- Set confidence conservatively based on source authority, independence,
+  recency, corroboration and representativeness.
+- The summary may synthesize only the cited claims.
+
+Return only the requested structured findings."""
 
 
-def synthesis_user_prompt(research_transcript: str, sources_listing: str) -> str:
-    return f"""RESEARCH TRANSCRIPT:
-{research_transcript}
+def specialist_structuring_input(
+    track: ResearchTrack,
+    research_notes: str,
+    sources: list[dict[str, str]],
+) -> str:
+    return f"""Structure the {track.label.lower()} research below.
 
-AVAILABLE SOURCES (cite only these IDs):
-{sources_listing}
+RESEARCH NOTES
+{research_notes}
 
-Produce the three report sections (business_model, competitive_landscape,
-quality_signals) as structured output."""
+AVAILABLE SOURCES
+{json.dumps(sources, indent=2, ensure_ascii=False)}
+
+If AVAILABLE SOURCES is empty, return no claims and state that no cited web
+evidence was captured."""
+
+
+AUDITOR_INSTRUCTIONS = """You are the evidence auditor for a UK credit-underwriting
+report. Three specialist agents have produced structured findings, and the
+application has already removed any specialist citation whose URL was not present
+in the raw web-search evidence.
+
+Your task is to produce the only evidence that may enter the final report:
+- Merge exact and near-duplicate claims, retaining all supporting source IDs.
+- Detect material contradictions. If one side is clearly better supported, retain
+  the better-supported claim at an appropriate confidence and record the conflict.
+  If it cannot be resolved, exclude the disputed factual conclusion, record the
+  contradiction, and add the uncertainty to the section's evidence gaps.
+- Remove claims that are unsupported, vague, about a namesake, promotional
+  generalisations, or stronger than their sources justify. Record each removal.
+- Never add a fact that is absent from the specialist findings.
+- Every final key point must have at least one source ID from AVAILABLE SOURCES.
+- Use confidence conservatively, considering source authority, independence,
+  recency, corroboration and representativeness.
+- Preserve and consolidate evidence gaps. Thin or conflicting evidence must be
+  explicit, especially for company quality signals.
+- Section summaries may synthesise only the validated key points and must not add
+  new factual propositions.
+- Competitive landscape must assess degree of competition and why it matters, not
+  merely list competitors.
+
+Return only the requested structured evidence audit."""
+
+
+def auditor_input(
+    company: dict[str, Any],
+    public_url: str,
+    specialist_evidence: dict[str, Any],
+    sources: list[dict[str, Any]],
+) -> str:
+    return f"""Audit the specialist evidence for this verified company.
+
+VERIFIED COMPANY
+{company_context(company, public_url)}
+
+SPECIALIST EVIDENCE
+{json.dumps(specialist_evidence, indent=2, ensure_ascii=False)}
+
+AVAILABLE SOURCES
+{json.dumps(sources, indent=2, ensure_ascii=False)}
+
+Only source IDs in AVAILABLE SOURCES are valid. Produce all three final sections
+plus the duplicate, contradiction and removed-claim audit trail."""

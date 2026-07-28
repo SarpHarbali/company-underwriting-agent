@@ -71,7 +71,7 @@ Orchestrator  (src/orchestrator.py)
         │
    ┌────┴─────────────────────────────┐
    ▼                                  ▼
-Resolver                        Research Agent
+Resolver                        Research workflow
 (companies_house/resolver.py)   (research/agent.py)
    │                                  │
    ├─ name_index.py → Postgres        │
@@ -79,18 +79,23 @@ Resolver                        Research Agent
    ├─ ranking.py    (Python rerank)   │
    │                                  │
    ▼                                  ▼
-CH Client                    OpenAI Responses API
-(companies_house/client.py)  ├─ function tools → CH Client
-                              └─ hosted web_search tool
-                                       │
-                                       ▼
-                              SourceRegistry (research/sources.py)
-                                       │
-                                       ▼
-                              Structured synthesis (schemas.py)
-                                       │
-                                       ▼
-                              Report builder (report/builder.py)
+CH Client                    OpenAI Agents SDK
+(companies_house/client.py)  ├─ Business-model specialist ─┐
+                             ├─ Competition specialist ─────┼─ in parallel
+                             └─ Quality-signals specialist ─┘
+                                              │
+                                              ▼
+                              Raw-search citation validation
+                              + SourceRegistry (validation.py)
+                                              │
+                                              ▼
+                                  Evidence-auditor agent
+                                  (dedupe / contradictions /
+                                   unsupported-claim removal)
+                                              │
+                                              ▼
+                              Deterministic report builder
+                              (report/builder.py)
 ```
 
 **Company resolution is deterministic, not LLM-driven.** The brief is explicit
@@ -159,64 +164,68 @@ expression index would need that logic restated as an IMMUTABLE SQL function,
 and the day the two copies drifted, names would silently stop matching queries
 that should find them.
 
-**Research is a genuinely agentic, two-phase process**, once the company is
-fixed:
+**Research is a four-agent, two-stage workflow**, once the company is fixed:
 
-- *Phase A - tool-calling research loop.* The model is given four Companies
-  House function tools (filing history, officers, PSC, charges - each scoped
-  to the already-resolved company, so there's no company-number parameter for
-  it to get wrong) plus OpenAI's hosted `web_search` tool, and is prompted to
-  decide for itself what's worth looking up for the three report sections, in
-  what order, and when it has gathered enough (see `research/prompts.py`). The
-  loop runs until the model stops calling tools or hits a configurable
-  tool-call budget (`MAX_RESEARCH_TOOL_CALLS`, default 12) - this is where "how
-  much evidence is enough" and "when to stop gathering" get handled, rather
-  than hardcoding a fixed fetch sequence.
-- *Phase B - constrained structured synthesis.* Every source the agent
-  actually touched (a Companies House page it queried, or a URL the
-  `web_search` tool returned - captured via the Responses API's
-  `url_citation` annotations) is logged into a `SourceRegistry` with a stable
-  integer ID. A second, separate call
-  (`client.responses.parse(text_format=StructuredReport)`) turns the research
-  transcript into the three report sections, and is instructed to cite *only*
-  IDs from that registry. As a second line of defence, `agent.py` strips any
-  cited ID that isn't actually in the registry before the report is rendered.
-  **This is the main grounding mechanism**: a citation that appears in the
-  final report is structurally guaranteed to trace back to a real source the
-  agent saw, not a model-invented one.
+- *Stage A - three parallel specialists.* The OpenAI Agents SDK runs separate
+  business-model, competitive-landscape and quality-signals agents concurrently
+  with `asyncio.gather`. Each worker first uses the hosted `WebSearchTool` to
+  produce cited research notes, preserving the Responses API's authoritative
+  `url_citation` annotations. It then runs a schema-enforced structuring pass
+  restricted to those captured URLs, producing `SpecialistFindings` with atomic
+  claims, citations, confidence and evidence gaps. This two-step shape is
+  deliberate: native structured-output messages do not carry web citation
+  annotations. Each specialist can refine its searches until it has enough
+  evidence or reaches `MAX_RESEARCH_TURNS` (default 8). A failed specialist
+  becomes an explicit low-confidence evidence gap, so the other two tracks can
+  still be audited.
+- *Stage B - closed-registry evidence audit.* The application requests
+  `web_search_call.action.sources` in the raw Responses payload. A specialist
+  citation is converted to a stable integer source ID only if its URL appears
+  in that raw payload (or is the already-fetched Companies House profile);
+  unmatched citations and their claims are rejected before the audit. The
+  evidence-auditor agent receives only this ID-backed evidence. It merges
+  duplicate claims, flags unresolved contradictions, removes weak or
+  unsupported claims, consolidates gaps and emits the three final structured
+  sections. A final mechanical filter again rejects unknown IDs. **The report
+  builder never sees the specialists' unreviewed output.**
+
+Agents SDK trace export is disabled by default because Zero Data Retention
+organizations cannot ingest traces. Non-ZDR deployments can opt in with
+`OPENAI_AGENTS_TRACING_ENABLED=true`.
 
 **Uncertainty is a first-class field, not an afterthought.** Every section and
 every individual claim carries a `confidence` (high/medium/low), and every
 section carries its own `evidence_gaps` - things an underwriter would want to
 know that the research didn't find. The report's "Data Completeness &
 Caveats" section surfaces these gaps up front rather than burying them, and
-flags explicitly if the tool-call budget was exhausted before the agent judged
-itself done.
+flags specialist failures, research-limit exhaustion and contradictions
+explicitly.
 
-**Report building is pure formatting - no LLM calls.** Once Phase B returns,
+**Report building is pure formatting - no LLM calls.** Once the audit returns,
 turning it into markdown is a deterministic function of already-grounded data
 (`report/builder.py`), which keeps that step trivially testable and makes it
 impossible for a rendering bug to introduce new claims.
 
 ## Key design decisions
 
-- **OpenAI's hosted `web_search` tool instead of a dedicated search API.**
+- **OpenAI Agents SDK plus hosted `WebSearchTool` instead of a dedicated search API.**
   The environment only provisioned Companies House and OpenAI keys. Using the
-  Responses API's built-in web search means the agent gets real, cited web
-  results without a third dependency, at the cost of not being able to choose
-  a specific search backend or tune ranking. Verified empirically (see git
-  history / dev notes) that both `web_search` and `web_search_preview` tool
-  types work with this key on `gpt-4.1`, and that hosted `web_search` and
-  custom function tools can be freely mixed in one Responses API loop.
-- **Function tools take no company-number argument.** Since the company is
-  fixed for the whole research session, letting the model pass a
-  `company_number` string is a pure liability (a typo or hallucinated number
-  would silently pull the wrong company's filings). The tools are closures
-  bound to the resolved company instead.
+  Responses API's built-in search through the SDK gives each specialist real,
+  inspectable source payloads without another search vendor. Python
+  orchestration keeps fan-out/fan-in deterministic: all specialists run, then
+  exactly one audit runs.
 - **Citations are IDs into a closed registry, not free-text URLs.** This is
   the single most important grounding decision in the system - it turns
   "please don't hallucinate a source" from a prompting request into a
-  structural guarantee, enforced twice (schema instruction + post-hoc filter).
+  structural guarantee. URL normalisation handles tracking parameters and
+  fragments, but a URL still must match raw search evidence before becoming an
+  ID. The auditor can cite only those IDs, and a post-audit filter enforces the
+  boundary again.
+- **The evidence auditor is a hard report boundary.** Specialists optimise for
+  recall within narrow topics; the auditor optimises for precision across all
+  three. Duplicate merging, contradiction handling and unsupported-claim
+  removal therefore happen before report generation rather than as cosmetic
+  caveats after it.
 - **Companies House domain migration.** Companies House has migrated its
   public hosts from `*.gov.uk` to `*.company-information.service.gov.uk`
   (the old `api.company-information.gov.uk` no longer resolves as of this
@@ -245,8 +254,8 @@ impossible for a rendering bug to introduce new claims.
   and is trivially downloadable; PDF generation is pure polish for a first
   pass.
 - **No caching of report data.** The database mirrors company *names*, for
-  resolution only. Every report run still re-fetches profile, officers, filings
-  and charges from the live API and re-runs web research. A real deployment
+  resolution only. Every report run still re-fetches the live profile and
+  re-runs web research. A real deployment
   underwriting the same company repeatedly would want to cache those too.
 - **No scheduled refresh of the index.** It's loaded once by hand. The snapshot
   is monthly and only used to find a company, so staleness costs recall on
@@ -276,22 +285,20 @@ impossible for a rendering bug to introduce new claims.
   a confidence figure - a near-miss on a 5M-name index can score 0.95. A
   calibrated 0-1 score would let the UI say how sure it is, and would give the
   weak-match threshold something real to test.
-- **Cache Companies House lookups** (profile, officers, filings) - they
-  change infrequently and are the cheapest, most reliable data in the system;
-  caching would speed up repeat runs and cut API calls.
-- **Let the agent re-query with refined search terms.** Right now a single
-  `web_search` tool definition is offered per call; a smarter loop could let
-  the model see its own search's result quality and decide to re-query with a
-  narrower/broader query rather than accepting whatever the first pass
-  returns.
-- **Add a lightweight "self-critique" pass** before finalising the report:
-  a second model call that checks the drafted sections against the
-  transcript specifically looking for unsupported generalisations, separate
-  from the citation-validity check that already exists.
-- **Surface partial results on failure.** If Companies House is down or the
-  OpenAI call errors mid-loop, the current behaviour is a clean error message;
-  a more resilient version would return whatever was gathered so far with a
-  clear "incomplete" flag rather than nothing at all.
+- **Cache the Companies House profile and validated web evidence** - repeat
+  underwriting runs for the same entity currently redo all network work.
+  Time-bounded caches would improve latency while retaining explicit evidence
+  timestamps.
+- **Build a labelled evidence-audit evaluation set.** The auditor currently
+  uses a strong schema, a closed citation registry and deterministic
+  post-validation, but its duplicate and contradiction judgements are still
+  qualitative. Representative claim/source bundles with expected keep,
+  merge, reject and conflict decisions would make prompt and model changes
+  measurable.
+- **Persist partial raw search results across process failure.** An individual
+  specialist failure is already surfaced as a gap while the other tracks
+  continue, but a process crash or auditor API failure still loses the
+  in-memory research bundle.
 - **Structured SIC code descriptions.** Companies House only returns SIC
   codes, not their descriptions; mapping these to human-readable industry
   labels would make the official record more immediately useful to an

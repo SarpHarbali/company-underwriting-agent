@@ -25,3 +25,15 @@ def test_valid_ids_and_get():
     assert source is not None
     assert source.kind == "companies_house"
     assert registry.get(999) is None
+
+
+def test_url_deduplication_ignores_tracking_parameters_and_fragments():
+    registry = SourceRegistry()
+    first = registry.add(
+        "web",
+        "Tracked",
+        "https://EXAMPLE.com/article/?utm_source=search#section",
+    )
+    second = registry.add("web", "Clean", "https://example.com/article")
+    assert first == second
+    assert registry.id_for_url("https://example.com/article/") == first

@@ -74,7 +74,6 @@ class Orchestrator:
         progress: ProgressCallback = lambda _: None,
     ) -> GeneratedReport:
         result = run_research(
-            client=self.openai_client,
             ch_client=self.ch_client,
             settings=self.settings,
             company_profile=company_profile,
