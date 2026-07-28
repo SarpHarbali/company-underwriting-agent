@@ -6,3 +6,6 @@ __pycache__/
 .streamlit/secrets.toml
 *.egg-info/
 .DS_Store
+
+# cached Companies House bulk download (~500 MB)
+data/

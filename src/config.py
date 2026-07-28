@@ -13,6 +13,10 @@ load_dotenv()
 @dataclass(frozen=True)
 class Settings:
     companies_house_api_key: str
+    # Postgres holding the loaded Companies House bulk data. Required: name
+    # resolution reads from it, and an empty or absent database would degrade
+    # to "no company matches anything" rather than to a slower fallback.
+    database_url: str
     openai_api_key: str
     openai_model: str
     openai_web_search_tool_type: str
@@ -36,6 +40,7 @@ def _require(name: str) -> str:
 def load_settings() -> Settings:
     return Settings(
         companies_house_api_key=_require("COMPANIES_HOUSE_API_KEY"),
+        database_url=_require("DATABASE_URL"),
         openai_api_key=_require("OPENAI_API_KEY"),
         openai_model=os.environ.get("OPENAI_MODEL", "gpt-4.1"),
         openai_web_search_tool_type=os.environ.get("OPENAI_WEB_SEARCH_TOOL_TYPE", "web_search"),

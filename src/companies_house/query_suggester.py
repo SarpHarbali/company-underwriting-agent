@@ -11,6 +11,12 @@ This exists for the cases single-edit variants can't reach by construction:
 multiple typos at once, consonant swaps, and - the real motivation - colloquial
 names that differ from the registered one, like "spoons" for Wetherspoon or
 "M&S" for Marks and Spencer. No amount of letter-shuffling gets you there.
+
+Called only where it can earn the round trip: when retrieval came back weak and
+there is no usable list without a correction, or when the user has looked at a
+good list and said their company isn't in it. The prompt's premise that the
+search "already failed to find a good match" is therefore true on both paths,
+not an assumption.
 """
 
 from __future__ import annotations
