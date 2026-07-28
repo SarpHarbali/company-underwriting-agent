@@ -18,7 +18,38 @@ def get_orchestrator() -> Orchestrator:
 def _reset_search_state() -> None:
     st.session_state.resolved_company = None
     st.session_state.candidates = None
+    st.session_state.corrected_query = None
+    st.session_state.suggestion = None
+    st.session_state.showing_suggestion = False
     st.session_state.report_markdown = None
+
+
+def _render_candidates(candidates, key_prefix: str) -> None:
+    """Render a selectable list of candidates, best first."""
+    for i, c in enumerate(candidates):
+        with st.container(border=True):
+            name_col, action_col = st.columns([5, 1])
+            with name_col:
+                title_line = f"**{c.title}**"
+                if i == 0:
+                    title_line += "  🏆 *Best match*"
+                st.markdown(title_line)
+
+                status_dot = "🟢" if c.status == "active" else "⚪"
+                meta = [f"{status_dot} {c.status}", c.company_type, f"No. {c.company_number}"]
+                if c.date_of_creation:
+                    meta.append(f"inc. {c.date_of_creation}")
+                st.caption("  ·  ".join(meta))
+                if c.address_snippet:
+                    st.caption(c.address_snippet)
+            with action_col:
+                if st.button("Select", key=f"{key_prefix}_{c.company_number}"):
+                    with st.spinner("Fetching company profile..."):
+                        st.session_state.resolved_company = orchestrator.get_company_profile(c.company_number)
+                    st.session_state.candidates = None
+                    st.session_state.suggestion = None
+                    st.session_state.showing_suggestion = False
+                    st.rerun()
 
 
 st.title("Underwriting Intelligence Agent")
@@ -27,7 +58,14 @@ st.caption(
     "citation-backed underwriting intelligence report."
 )
 
-for key, default in [("resolved_company", None), ("candidates", None), ("report_markdown", None)]:
+for key, default in [
+    ("resolved_company", None),
+    ("candidates", None),
+    ("corrected_query", None),
+    ("suggestion", None),
+    ("showing_suggestion", False),
+    ("report_markdown", None),
+]:
     if key not in st.session_state:
         st.session_state[key] = default
 
@@ -54,28 +92,48 @@ if submitted:
         st.session_state.resolved_company = result.company_profile
     elif result.is_ambiguous:
         st.session_state.candidates = result.candidates
+        st.session_state.corrected_query = result.corrected_query
+        st.session_state.suggestion = result.suggestion
+
+# Offered right under the search bar, but only as a question - the suggested
+# query's results stay hidden until asked for, so a wrong guess costs the user
+# a glance rather than a screen of irrelevant companies.
+if st.session_state.suggestion and not st.session_state.showing_suggestion:
+    prompt_col, yes_col = st.columns([5, 1])
+    with prompt_col:
+        st.info(f"Did you mean **{st.session_state.suggestion.query}**?")
+    with yes_col:
+        if st.button("Yes", key="show_suggestion"):
+            st.session_state.showing_suggestion = True
+            st.rerun()
 
 if st.session_state.candidates:
+    showing_suggestion = st.session_state.showing_suggestion and st.session_state.suggestion
+    if showing_suggestion:
+        shown_candidates = st.session_state.suggestion.candidates
+        # Without a way back, a wrong guess would strand the user on results
+        # for a query they never typed, with only a re-search to escape.
+        msg_col, back_col = st.columns([5, 1])
+        with msg_col:
+            st.info(f"Showing results for **{st.session_state.suggestion.query}**.")
+        with back_col:
+            if st.button("Back", key="hide_suggestion"):
+                st.session_state.showing_suggestion = False
+                st.rerun()
+    else:
+        shown_candidates = st.session_state.candidates
+        if st.session_state.corrected_query:
+            st.info(
+                f"No matches for that spelling - showing results for "
+                f"**'{st.session_state.corrected_query}'** instead. Please confirm the right company below."
+            )
+
+    match_count = len(shown_candidates)
     st.warning(
-        f"Found {len(st.session_state.candidates)} possible matches - please confirm "
+        f"Found {match_count} possible {'match' if match_count == 1 else 'matches'} - please confirm "
         "the correct company before a report is generated."
     )
-    options = {}
-    for c in st.session_state.candidates:
-        label = f"{c.title}  ·  {c.company_number}  ·  {c.status}  ·  {c.company_type}"
-        if c.date_of_creation:
-            label += f"  ·  inc. {c.date_of_creation}"
-        if c.address_snippet:
-            label += f"  ·  {c.address_snippet}"
-        options[label] = c
-
-    choice_label = st.radio("Select the correct company:", list(options.keys()), index=None)
-    if choice_label and st.button("Confirm selection"):
-        chosen = options[choice_label]
-        with st.spinner("Fetching company profile..."):
-            st.session_state.resolved_company = orchestrator.get_company_profile(chosen.company_number)
-        st.session_state.candidates = None
-        st.rerun()
+    _render_candidates(shown_candidates, key_prefix="select")
 
 if st.session_state.resolved_company and not st.session_state.candidates:
     profile = st.session_state.resolved_company

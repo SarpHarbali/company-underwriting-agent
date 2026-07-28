@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from openai import OpenAI
 
 from src.companies_house.client import CompaniesHouseClient
+from src.companies_house.query_suggester import build_query_suggester
 from src.companies_house.resolver import ResolutionResult, resolve_company
 from src.config import Settings, load_settings
 from src.report.builder import build_report_markdown
@@ -33,9 +34,12 @@ class Orchestrator:
             public_base_url=self.settings.companies_house_public_base_url,
         )
         self.openai_client = OpenAI(api_key=self.settings.openai_api_key)
+        self._suggest_query = build_query_suggester(
+            self.openai_client, self.settings.openai_model
+        )
 
     def resolve(self, user_input: str) -> ResolutionResult:
-        return resolve_company(self.ch_client, user_input)
+        return resolve_company(self.ch_client, user_input, suggest_query=self._suggest_query)
 
     def get_company_profile(self, company_number: str) -> dict:
         """Fetch a profile directly - used when the user confirms a disambiguation candidate."""
