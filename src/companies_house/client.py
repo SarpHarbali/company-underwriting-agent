@@ -1,9 +1,3 @@
-"""Thin wrapper around the Companies House public data REST API.
-
-Docs: https://developer-specs.company-information.service.gov.uk/
-Auth: HTTP Basic, API key as username, blank password.
-"""
-
 from __future__ import annotations
 
 from typing import Any
@@ -18,20 +12,18 @@ from tenacity import (
 
 
 class CompaniesHouseAPIError(Exception):
-    """Raised for unexpected (non-404) Companies House API failures."""
+    pass
 
 
 class CompanyNotFoundError(Exception):
-    """Raised when a specific company/resource genuinely doesn't exist (404)."""
+    pass
 
 
 class RateLimitedError(CompaniesHouseAPIError):
-    """Raised when a request still fails after retries."""
+    pass
 
 
 class CompaniesHouseClient:
-    """Minimal, resilient client for the endpoints this project needs."""
-
     def __init__(
         self,
         api_key: str,

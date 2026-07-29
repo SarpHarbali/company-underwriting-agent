@@ -1,5 +1,3 @@
-"""Render Companies House data and audited research as Markdown."""
-
 from __future__ import annotations
 
 from typing import Any

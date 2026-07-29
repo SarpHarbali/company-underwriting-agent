@@ -1,5 +1,3 @@
-"""Resolve a company number or produce ranked name candidates."""
-
 from __future__ import annotations
 
 import logging
@@ -17,8 +15,6 @@ _log = logging.getLogger(__name__)
 
 
 class QuerySuggester(Protocol):
-    """Suggest a corrected search query, or return None."""
-
     def __call__(self, text: str) -> str | None: ...
 
 
@@ -31,16 +27,12 @@ _MAX_DISPLAYED_CANDIDATES = 10
 
 @dataclass(frozen=True)
 class SuggestedAlternative:
-    """Candidates found using a suggested alternative query."""
-
     query: str
     candidates: list[Candidate]
 
 
 @dataclass(frozen=True)
 class ResolutionResult:
-    """The resolved profile, name candidates, or a user-facing error."""
-
     company_profile: dict[str, Any] | None = None
     candidates: list[Candidate] | None = None
     error: str | None = None
@@ -61,7 +53,6 @@ def _looks_like_company_number(text: str) -> bool:
 
 
 def _ranked_matches(repository: NameRepository, query: str) -> list[Candidate]:
-    """Retrieve a wide shortlist for `query` and rerank it, best first."""
     query_norm, query_stem = normalised_forms(query)
     if not query_norm:
         return []
@@ -76,7 +67,6 @@ def _best_score(candidates: list[Candidate]) -> float:
 
 
 def _suggested_query(suggest_query: QuerySuggester, text: str) -> str | None:
-    """Return a useful corrected query without breaking deterministic lookup."""
     try:
         suggestion = suggest_query(text)
     except Exception:  # noqa: BLE001 - never let this break resolution
@@ -157,7 +147,6 @@ def suggest_alternative(
     suggest_query: QuerySuggester,
     listed_numbers: Collection[str] = (),
 ) -> SuggestedAlternative | None:
-    """Return unseen candidates for a user-requested alternative query."""
     suggestion = _suggested_query(suggest_query, user_input.strip())
     if not suggestion:
         return None

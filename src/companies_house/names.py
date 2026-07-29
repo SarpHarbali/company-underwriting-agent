@@ -1,5 +1,3 @@
-"""Normalise company names and generate short-query typo variants."""
-
 from __future__ import annotations
 
 import re
@@ -37,7 +35,6 @@ _VARIANT_ALPHABET = "abcdefghijklmnopqrstuvwxyz "
 
 
 def normalise_name(text: str) -> str:
-    """Casefold, strip accents and punctuation, and collapse whitespace."""
     decomposed = unicodedata.normalize("NFKD", text)
     unaccented = "".join(c for c in decomposed if not unicodedata.combining(c))
     expanded = unaccented.lower().replace("&", " and ")
@@ -45,11 +42,6 @@ def normalise_name(text: str) -> str:
 
 
 def strip_legal_suffix(normalised: str) -> str:
-    """Drop trailing legal-form tokens: "acme trading co limited" -> "acme trading".
-
-    Applied repeatedly, since names stack them. Never strips the last token: a
-    company genuinely named "Limited" keeps a searchable form.
-    """
     tokens = normalised.split()
     while len(tokens) > 1:
         for run in _LEGAL_SUFFIX_RUNS:
@@ -62,13 +54,11 @@ def strip_legal_suffix(normalised: str) -> str:
 
 
 def normalised_forms(text: str) -> tuple[str, str]:
-    """The (full, suffix-free) normalised pair stored and queried for every name."""
     full = normalise_name(text)
     return full, strip_legal_suffix(full)
 
 
 def query_variants(query_norm: str, query_stem: str) -> list[str]:
-    """Return one-edit variants of the full and suffix-free query."""
     variants = one_edit_variants(query_norm)
     if query_stem and query_stem != query_norm:
         seen = set(variants)
@@ -81,7 +71,6 @@ def one_edit_variants(
     max_length: int = MAX_VARIANT_QUERY_LENGTH,
     max_variants: int = MAX_VARIANTS,
 ) -> list[str]:
-    """Generate transposition, deletion, substitution and insertion variants."""
     if not normalised or len(normalised) > max_length:
         return []
 

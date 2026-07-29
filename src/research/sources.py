@@ -1,5 +1,3 @@
-"""Stable source IDs for citation validation and report rendering."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
@@ -15,7 +13,6 @@ _TRACKING_QUERY_KEYS = {
 
 
 def canonical_url(url: str) -> str:
-    """Normalise harmless URL differences before citation validation."""
     value = url.strip()
     try:
         parsed = urlsplit(value)

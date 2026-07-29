@@ -1,5 +1,3 @@
-"""Recall-oriented candidate retrieval from the local company-name index."""
-
 from __future__ import annotations
 
 import logging
@@ -16,8 +14,6 @@ _log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class NameMatch:
-    """A matched current or former name and its company details."""
-
     company_number: str
     current_name: str
     matched_name: str
@@ -98,14 +94,11 @@ LIMIT %(total_limit)s
 
 
 def _like_prefix(text: str) -> str:
-    """Return an escaped LIKE pattern for a leading whole-word match."""
     escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"{escaped} %"
 
 
 class PostgresNameRepository:
-    """`NameRepository` backed by the loaded bulk-data tables."""
-
     def __init__(
         self,
         pool: ConnectionPool,

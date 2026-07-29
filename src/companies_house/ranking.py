@@ -1,5 +1,3 @@
-"""Rank name-index matches for user disambiguation."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,8 +22,6 @@ _INACTIVE_STATUSES = {
 
 @dataclass(frozen=True)
 class Candidate:
-    """A company presented for user disambiguation."""
-
     company_number: str
     title: str
     status: str
@@ -56,7 +52,6 @@ def _ngrams(text: str, n: int) -> set[str]:
 
 
 def _ngram_overlap(a: str, b: str, n: int) -> float:
-    """Return the Dice coefficient over character n-grams."""
     grams_a, grams_b = _ngrams(a, n), _ngrams(b, n)
     if not grams_a or not grams_b:
         return 0.0
@@ -66,8 +61,6 @@ def _ngram_overlap(a: str, b: str, n: int) -> float:
 def _name_similarity(
     query_norm: str, query_stem: str, name_norm: str, name_stem: str
 ) -> float:
-    """Blend similarity across full and suffix-free names."""
-
     def best(measure) -> float:
         return max(measure(query_norm, name_norm), measure(query_stem, name_stem))
 
@@ -86,7 +79,6 @@ def _name_similarity(
 
 
 def _age_bonus(incorporation_date: date | None) -> float:
-    """Return a bounded tie-break bonus for company age."""
     if incorporation_date is None:
         return 0.0
     age_years = date.today().year - incorporation_date.year
@@ -94,7 +86,6 @@ def _age_bonus(incorporation_date: date | None) -> float:
 
 
 def score_match(query: str, match: NameMatch) -> Candidate:
-    """Score one index row. Higher = more likely to be the company meant."""
     query_norm, query_stem = normalised_forms(query)
     name_norm, name_stem = normalised_forms(match.matched_name)
 
@@ -132,7 +123,6 @@ def score_match(query: str, match: NameMatch) -> Candidate:
 
 
 def rank_matches(query: str, matches: list[NameMatch]) -> list[Candidate]:
-    """Keep the highest-scoring name match per company."""
     best_by_number: dict[str, Candidate] = {}
     for match in matches:
         candidate = score_match(query, match)

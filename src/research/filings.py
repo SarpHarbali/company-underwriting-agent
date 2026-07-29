@@ -1,5 +1,3 @@
-"""Build report evidence from structured Companies House registers."""
-
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
@@ -167,7 +165,6 @@ def gather_filings_findings(
     company_number: str,
     public_url: str,
 ) -> dict[str, SpecialistFindings]:
-    """Fetch official registers and route their claims to report sections."""
     claims: dict[str, list[SpecialistClaim]] = {
         section: [] for section in _SECTION_SUMMARIES
     }
@@ -235,7 +232,6 @@ def gather_filings_findings(
 
 
 def filings_briefing(evidence: dict[str, SpecialistFindings]) -> str:
-    """Render official findings as context for each web specialist."""
     lines: list[str] = []
     for section in _SECTION_SUMMARIES:
         findings = evidence.get(section)

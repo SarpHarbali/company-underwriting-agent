@@ -1,25 +1,4 @@
 #!/usr/bin/env python3
-"""One-off loader: Companies House bulk company data -> Postgres.
-
-Downloads the monthly "Free Company Data Product" snapshot
-(http://download.companieshouse.gov.uk/en_output.html), unpivots its wide
-previous-name columns into rows, and loads the result into the `companies` and
-`company_name_index` tables that name resolution queries.
-
-This is build-time work, not a scheduled refresh: the index only has to be good
-enough to *find* a company, and the live API is called for that company's actual
-details the moment one is chosen, so a month-old snapshot costs nothing that
-matters. Re-run it by hand when you want fresher data.
-
-    python scripts/load_companies.py                    # download + full load
-    python scripts/load_companies.py --limit 300000     # smaller demo database
-    python scripts/load_companies.py --zip path/to.zip  # already downloaded
-    python scripts/load_companies.py --recreate         # drop and reload
-
-Expect ~30-60 minutes and several GB for a full load; see the README for
-sizing notes before pointing this at a free-tier database.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -55,12 +34,6 @@ _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
 
 def _normalise_status(raw: str) -> str | None:
-    """Map bulk-file statuses onto the REST API's vocabulary.
-
-    The two products spell the same status differently ("Active - Proposal to
-    Strike off" vs "active-proposal-to-strike-off"). Ranking treats status as a
-    signal, so it needs one vocabulary rather than two.
-    """
     normalised = _NON_ALNUM.sub("-", raw.strip().lower()).strip("-")
     return normalised or None
 
@@ -76,12 +49,6 @@ def _parse_date(raw: str) -> date | None:
 
 
 def _latest_available_url(session: requests.Session, months_back: int = 6) -> str:
-    """Find the most recent published snapshot.
-
-    The file is published on the 1st of each month, but not always on the 1st,
-    so the current month's URL can 404 for a few days - walk backwards until
-    one exists rather than hardcoding a date that goes stale.
-    """
     today = date.today()
     for offset in range(months_back):
         year, month = divmod(today.year * 12 + today.month - 1 - offset, 12)
@@ -123,7 +90,6 @@ def _download(session: requests.Session, url: str, destination: Path) -> Path:
 
 
 def _open_csv(archive: Path) -> tuple[zipfile.ZipFile, Iterator[list[str]]]:
-    """Stream the CSV straight out of the zip - it decompresses to several GB."""
     zip_file = zipfile.ZipFile(archive)
     names = [n for n in zip_file.namelist() if n.lower().endswith(".csv")]
     if not names:
@@ -135,12 +101,6 @@ def _open_csv(archive: Path) -> tuple[zipfile.ZipFile, Iterator[list[str]]]:
 
 
 def _column_positions(header: list[str]) -> dict[str, int]:
-    """Map the columns we need onto their positions.
-
-    Several headers in the published file carry a stray leading space
-    (" CompanyNumber", " PreviousName_1.CompanyName"), so lookups are done on
-    stripped names rather than trusting the file's spelling.
-    """
     positions = {name.strip(): i for i, name in enumerate(header)}
     required = [
         "CompanyName",

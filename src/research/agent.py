@@ -1,5 +1,3 @@
-"""Parallel web research followed by a closed-registry evidence audit."""
-
 from __future__ import annotations
 
 import asyncio
@@ -337,7 +335,6 @@ def run_research(
     company_profile: dict[str, Any],
     progress: ProgressCallback = _noop_progress,
 ) -> ResearchResult:
-    """Run the complete synchronous report-research workflow."""
     company_number = company_profile["company_number"]
     public_url = ch_client.public_company_url(company_number)
     return asyncio.run(

@@ -1,16 +1,3 @@
-"""Integration test for the candidate-generation SQL.
-
-Skipped unless TEST_DATABASE_URL is set. It deliberately does *not* fall back
-to DATABASE_URL: this test drops and recreates its schema, and pointing it at
-the loaded index by accident would destroy an hour of loading.
-
-    createdb ch_test && TEST_DATABASE_URL=postgresql:///ch_test pytest tests/
-
-Everything else in the suite is pure-Python and runs offline; this is the only
-place the SQL, the trigram operators and the index definitions are exercised at
-all, so it's worth the setup when changing `name_index.py`.
-"""
-
 from __future__ import annotations
 
 import os

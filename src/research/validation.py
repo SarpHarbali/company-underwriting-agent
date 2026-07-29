@@ -1,5 +1,3 @@
-"""Mechanical grounding checks around the LLM-based evidence audit."""
-
 from __future__ import annotations
 
 from typing import Any
@@ -17,7 +15,6 @@ from src.research.sources import SourceRegistry
 
 
 def register_run_sources(run_result: Any, registry: SourceRegistry) -> int:
-    """Register sources from raw web-search calls and citation annotations."""
     web_search_calls = 0
     for response in getattr(run_result, "raw_responses", ()) or ():
         for item in getattr(response, "output", ()) or ():
@@ -51,7 +48,6 @@ def validate_specialist_findings(
     findings: SpecialistFindings,
     registry: SourceRegistry,
 ) -> tuple[ReportSection, list[RemovedClaim]]:
-    """Translate cited URLs to IDs and reject claims with no searched source."""
     points: list[KeyPoint] = []
     removed: list[RemovedClaim] = []
     for finding in findings.claims:
@@ -102,7 +98,6 @@ def register_official_findings(
     findings: SpecialistFindings,
     registry: SourceRegistry,
 ) -> ReportSection:
-    """Register findings built directly from official records."""
     points: list[KeyPoint] = []
     for finding in findings.claims:
         source_ids = list(
@@ -131,7 +126,6 @@ def validate_audit(
     registry: SourceRegistry,
     allowed_ids: set[int] | None = None,
 ) -> EvidenceAudit:
-    """Remove any evidence the auditor failed to keep inside the closed registry."""
     valid_ids = registry.valid_ids()
     if allowed_ids is not None:
         valid_ids &= allowed_ids

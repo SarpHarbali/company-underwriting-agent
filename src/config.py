@@ -1,5 +1,3 @@
-"""Environment-driven configuration for the underwriting agent."""
-
 from __future__ import annotations
 
 import os

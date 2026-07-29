@@ -50,6 +50,10 @@ schema.
 
 ## Architecture
 
+See [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) for the architectural rationale,
+technology and LLM choices, build-vs-defer decisions, and production next
+steps.
+
 ```text
 Streamlit UI
     |

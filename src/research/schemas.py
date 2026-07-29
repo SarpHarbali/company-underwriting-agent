@@ -1,5 +1,3 @@
-"""Structured contracts for research findings and evidence audits."""
-
 from __future__ import annotations
 
 from enum import Enum
@@ -78,8 +76,6 @@ class RemovedClaim(BaseModel):
 
 
 class EvidenceAudit(BaseModel):
-    """Auditor output: validated report sections plus a review trail."""
-
     model_config = ConfigDict(extra="forbid")
 
     business_model: ReportSection

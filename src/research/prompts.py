@@ -1,5 +1,3 @@
-"""Prompts for the parallel specialists and evidence-auditor agent."""
-
 from __future__ import annotations
 
 import json

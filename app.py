@@ -1,5 +1,3 @@
-"""Streamlit UI for the underwriting intelligence agent."""
-
 from __future__ import annotations
 
 import streamlit as st

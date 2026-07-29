@@ -1,5 +1,3 @@
-"""LLM-backed spelling and alias suggestions for company searches."""
-
 from __future__ import annotations
 
 from openai import OpenAI
@@ -38,8 +36,6 @@ class SuggestedQuery(BaseModel):
 
 
 def build_query_suggester(client: OpenAI, model: str) -> QuerySuggester:
-    """Build a query suggester backed by the Responses API."""
-
     def suggest(text: str) -> str | None:
         response = client.responses.parse(
             model=model,
