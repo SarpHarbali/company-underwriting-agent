@@ -167,7 +167,7 @@ def build_report_markdown(
     if referenced_sources:
         for source in referenced_sources:
             kind_label = "Companies House" if source.kind == "companies_house" else "Web"
-            parts.append(f"[{source.id}] ({kind_label}) [{source.title}]({source.url})")
+            parts.append(f"- [{source.id}] ({kind_label}) [{source.title}]({source.url})")
     else:
         parts.append("No sources were gathered.")
 

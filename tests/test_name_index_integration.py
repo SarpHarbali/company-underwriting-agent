@@ -39,9 +39,6 @@ def repository():
         conn.execute(f"CREATE SCHEMA {_SCHEMA}")
 
     def use_test_schema(conn):
-        # pg_trgm lives in public; the fixture tables live in their own schema
-        # so a stray run can't touch a real index. The commit matters - the
-        # pool discards any connection left mid-transaction by `configure`.
         conn.execute(f"SET search_path TO {_SCHEMA}, public")
         conn.commit()
 

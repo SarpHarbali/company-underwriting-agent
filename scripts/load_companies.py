@@ -22,12 +22,8 @@ from src.db import INDEXES_SQL, SCHEMA_SQL  # noqa: E402
 
 _DOWNLOAD_URL = "https://download.companieshouse.gov.uk/BasicCompanyDataAsOneFile-{month}.zip"
 
-# The bulk file caps former names at ten slots.
 _MAX_PREVIOUS_NAMES = 10
 
-# Rows buffered before a COPY. The two tables are written on the same
-# connection, so they can't stream concurrently - chunking keeps memory flat
-# while still handing Postgres batches big enough for COPY to be worth it.
 _CHUNK_ROWS = 50_000
 
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
@@ -173,9 +169,6 @@ def _load_rows(
             incorporated = _parse_date(row[incorporated_column])
             postcode = row[postcode_column].strip() or None
 
-            # The current name first, then one row per populated previous-name
-            # slot - this is the unpivot. Company-level fields are repeated on
-            # every row (see schema.sql).
             names = [(row[name_column].strip(), False)]
             names += [
                 (row[column].strip(), True)
@@ -229,8 +222,6 @@ def _build_indexes(conn: psycopg.Connection) -> None:
         try:
             cur.execute("SET maintenance_work_mem = '512MB'")
         except psycopg.Error:
-            # Managed providers often forbid this; index creation is merely
-            # slower without it, so a refusal isn't worth failing the load for.
             conn.rollback()
         cur.execute(INDEXES_SQL)
         conn.commit()

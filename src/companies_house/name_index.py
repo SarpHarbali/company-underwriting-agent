@@ -32,8 +32,6 @@ class NameRepository(Protocol):
 _DEFAULT_BRANCH_LIMIT = 150
 _DEFAULT_TOTAL_LIMIT = 500
 
-# These thresholds retained recall in full-register testing while avoiding the
-# very large candidate sets produced by pg_trgm's 0.3 default.
 _DEFAULT_SIMILARITY_THRESHOLD = 0.65
 _DEFAULT_WORD_SIMILARITY_THRESHOLD = 0.7
 

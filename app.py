@@ -100,7 +100,7 @@ except RuntimeError as exc:
 with st.form("search_form"):
     user_input = st.text_input(
         "Company name or registration number",
-        placeholder="e.g. Monzo Bank Limited or 09446231",
+        placeholder="e.g. Allica Bank Limited or 07706156",
     )
     submitted = st.form_submit_button("Search")
 

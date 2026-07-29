@@ -36,8 +36,6 @@ def test_normalise_name(raw, expected):
         ("acme public limited company", "acme"),
         ("acme limited liability partnership", "acme"),
         ("acme", "acme"),
-        # A company genuinely named after a legal form keeps a searchable name
-        # rather than stripping to nothing.
         ("limited", "limited"),
         ("company limited", "company"),
     ],
@@ -56,8 +54,6 @@ def test_one_edit_variants_cover_the_four_slip_types():
 
 
 def test_variants_are_already_normalised():
-    # A variant that isn't in normal form can never match the index, which
-    # only stores normalised names.
     for variant in one_edit_variants("john lewis"):
         assert variant == normalise_name(variant)
 

@@ -31,8 +31,6 @@ def test_case_and_punctuation_do_not_matter():
 
 
 def test_suffix_only_difference_is_nearly_an_exact_match():
-    # Close enough to rank alongside an exact hit, but not equal to one: two
-    # distinct companies can differ only in their legal suffix.
     assert score("acme ltd", "ACME LIMITED") > score("acme ltd", "Acme Holdings Limited")
     assert score("acme ltd", "ACME LIMITED") < score("acme ltd", "Acme Ltd")
 

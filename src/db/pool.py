@@ -15,10 +15,6 @@ def create_pool(database_url: str, min_size: int = 1, max_size: int = 4) -> Conn
         max_size=max_size,
         timeout=15.0,
         max_idle=300.0,
-        # The pool outlives long idle spells (cached for the process lifetime,
-        # while a managed Postgres autosuspends its compute), so connections
-        # can be dead by the time they're handed out. Checking on checkout
-        # trades a round-trip for not failing the first query after a lull.
         check=ConnectionPool.check_connection,
         open=False,
     )
